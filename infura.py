@@ -6,6 +6,7 @@ from requests import JSONDecodeError, get
 from time import sleep, time
 from web3 import Web3
 import json
+import logging
 from hexbytes import HexBytes
 from web3.datastructures import AttributeDict
 from web3.logs import DISCARD
@@ -22,12 +23,13 @@ class Infura:
     _contract_times = [0] * 5
 
     @staticmethod
-    def get_block(blockNum: Union[str, int] = 'latest', n: int = 1) -> Union[Block, List[Block]]:
+    def get_block(blockNum: Union[str, int] = 'latest', n: int = 1, deep=True) -> Union[Block, List[Block]]:
         """
         Get a block from the block chain
 
         :param blockNum: can either by a block hash (hex num) or the latest, defaults to 'latest'
         :param n: how many blocks to get (parents), defaults to 1
+        :param deep: search lower values as well
         :return: Either a single or a list of block objects
         """
         res = []
@@ -35,8 +37,9 @@ class Infura:
         block: Dict = {'parentHash': blockNum}
         # get n blocks and append
         for _ in range(n):
+            logging.info(f"Requesting Block '{block['parentHash']}' from Infura API")
             block: AttributeDict = Infura.w3.eth.get_block(block['parentHash'])
-            res.append(Block(block))
+            res.append(Block(block,deep))
         return res if len(res) != 1 else res[0]
 
     @staticmethod
@@ -47,7 +50,8 @@ class Infura:
         :param txnHash: the transaction hash
         :return: a transaction object
         """
-        return Transaction(Infura.w3.eth.get_transaction(txnHash))
+        logging.info(f"Requesting Transaction '{txnHash}' from Infura API")
+        return Transaction(Infura.w3.eth.get_transaction(txnHash),deep)
 
     @staticmethod
     def get_transaction_receipt(txnHash: str) -> Transaction:
@@ -57,7 +61,8 @@ class Infura:
         :param txnHash: the transaction hash
         :return: a transaction receipt object
         """
-        return TransactionReceipt(Infura.w3.eth.get_transaction_receipt(txnHash))
+        logging.info(f"Requesting Transaction Receipt '{txnHash}' from Infura API")
+        return TransactionReceipt(Infura.w3.eth.get_transaction_receipt(txnHash),deep)
 
     @staticmethod
     def save_data(f: TextIOWrapper, data: List[Block]) -> None:
@@ -88,6 +93,7 @@ class Infura:
                 sleep(deltaTime)
                 # SAFE MODE
                 sleep(0.1)
+            logging.info(f"Requesting abi info from contract '{contractAddr}' from Etherscan API")
             abi = get(f"{Infura.abi_endpoint}&address={contractAddr}&apikey={Infura.ETHERSCAN_API_KEY}").text
             if "Max rate limit reached" in abi:
                 print("Etherscan API Limit reached",file=stderr)
@@ -95,6 +101,7 @@ class Infura:
             if "Contract source code not verified" in abi:
                 return None
             Infura.ABI[contractAddr] = json.loads(abi)
+        logging.info(f"Requesting Contract '{contractAddr}' from Infura API")
         return Infura.w3.eth.contract(address=contractAddr, abi=Infura.ABI[contractAddr]["result"])
 
     @staticmethod
@@ -124,7 +131,7 @@ class TransactionReceipt:
     A copy class for a transaction receipt, useful for type hinting
 
     """
-    def __init__(self, raw) -> None:
+    def __init__(self, raw, deep) -> None:
         raw = dict(raw)
         self.raw = raw
         self.blockHash: HexBytes = raw["blockHash"]
@@ -135,28 +142,29 @@ class TransactionReceipt:
         self._from: HexBytes = raw["from"]
         self.gasUsed: HexBytes = raw["gasUsed"]
         self.logs: List = [dict(log) for log in raw["logs"]]
-        for log in self.logs:
-            contract = Infura.get_contract(log["address"])
-            if contract == None:
-                log["decoded"] = "No Valid contract"
-                continue
-            # Get event signature of log (first item in topics array)
-            receipt_event_signature_hex = log["topics"][0]
-            abi_events = [abi for abi in contract.abi if abi["type"] == "event"]
-            # Determine which event in ABI matches the transaction log you are decoding
-            for event in abi_events:
-                # Get event signature components
-                name = event["name"]
-                inputs = [param["type"] for param in event["inputs"]]
-                inputs = ",".join(inputs)
-                # Hash event signature
-                event_signature_text = f"{name}({inputs})"
-                event_signature_hex = Infura.w3.keccak(text=event_signature_text)
-                # Find match between log's event signature and ABI's event signature
-                if event_signature_hex == receipt_event_signature_hex:
-                    # Decode matching log
-                    decoded = contract.events[event["name"]]().processReceipt(self.raw, errors=DISCARD)
-                    log["decoded"] = decoded
+        if deep:
+            for log in self.logs:
+                contract = Infura.get_contract(log["address"])
+                if contract == None:
+                    log["decoded"] = "No Valid contract"
+                    continue
+                # Get event signature of log (first item in topics array)
+                receipt_event_signature_hex = log["topics"][0]
+                abi_events = [abi for abi in contract.abi if abi["type"] == "event"]
+                # Determine which event in ABI matches the transaction log you are decoding
+                for event in abi_events:
+                    # Get event signature components
+                    name = event["name"]
+                    inputs = [param["type"] for param in event["inputs"]]
+                    inputs = ",".join(inputs)
+                    # Hash event signature
+                    event_signature_text = f"{name}({inputs})"
+                    event_signature_hex = Infura.w3.keccak(text=event_signature_text)
+                    # Find match between log's event signature and ABI's event signature
+                    if event_signature_hex == receipt_event_signature_hex:
+                        # Decode matching log
+                        decoded = contract.events[event["name"]]().processReceipt(self.raw, errors=DISCARD)
+                        log["decoded"] = decoded
         self.logsBloom: HexBytes = raw["logsBloom"]
         self.status: int = raw["status"]
         self._to: HexBytes = raw["to"]
@@ -193,7 +201,7 @@ class Transaction:
     A copy class for a transaction, useful for type hinting
 
     """
-    def __init__(self, raw) -> None:
+    def __init__(self, raw, deep) -> None:
         raw = dict(raw)
         self.blockHash: HexBytes = raw["blockHash"]
         self.blockNumber: int = raw["blockNumber"]
@@ -211,7 +219,7 @@ class Transaction:
         self.v: int = raw["v"]
         self.value: int = raw["value"]
         self.receipt: TransactionReceipt = Infura.get_transaction_receipt(
-            self._hash)
+            self._hash) if deep else ""
 
     def __hash__(self) -> int:
         return self._hash
@@ -236,7 +244,7 @@ class Transaction:
             "type": self.type,
             "v": self.v,
             "value": self.value,
-            "receipt": self.receipt.encode()
+            "receipt": self.receipt.encode() if self.receipt != "" else ""
         }
 
 class Block:
@@ -244,10 +252,9 @@ class Block:
     A copy class for a block, useful for type hinting
 
     """
-    def __init__(self, raw) -> None:
+    def __init__(self, raw, deep) -> None:
         raw = dict(raw)
         self.raw = raw
-        self.baseFeePerGas: int = raw["baseFeePerGas"]
         self.difficulty: int = raw["difficulty"]
         self.extraData: HexBytes = raw["extraData"]
         self.gasLimit: int = raw["gasLimit"]
@@ -267,7 +274,7 @@ class Block:
         self.totalDifficulty: int = raw["totalDifficulty"]
         self.transactionHashes: List[HexBytes] = raw["transactions"]
         self.transactions: List[Transaction] = [
-            Infura.get_transaction(txn) for txn in self.transactionHashes]
+            Infura.get_transaction(txn) for txn in self.transactionHashes] if deep else ""
         self.transactionsRoot: HexBytes = raw["transactionsRoot"]
         self.uncles: List[HexBytes] = raw["uncles"]
 
@@ -285,8 +292,6 @@ class Block:
 
     def encode(self) -> Dict:
         return {
-            "raw": self.raw,
-            "baseFeePerGas": self.baseFeePerGas,
             "difficulty": self.difficulty,
             "extraData": self.extraData,
             "gasLimit": self.gasLimit,
@@ -305,13 +310,14 @@ class Block:
             "timestamp": self.timestamp,
             "totalDifficulty": self.totalDifficulty,
             "transactionHashes": self.transactionHashes,
-            "transactions": [transaction.encode() for transaction in self.transactions],
+            "transactions": [transaction.encode() for transaction in self.transactions if transaction != ""],
             "transactionsRoot": self.transactionsRoot,
-            "uncles": self.uncle
+            "uncles": self.uncles
         }
 
 
 if __name__ == "__main__":
-    block = Infura.get_block(0x4cb6e139755c24f5c295be2d1010aaeccab8f3003cf0d1944dd8642116e97a24)
-    with open('results/known_bad.json', 'w') as f:
+    logging.basicConfig(filename="process.log",level=logging.INFO)
+    block = Infura.get_block('0x4cb6e139755c24f5c295be2d1010aaeccab8f3003cf0d1944dd8642116e97a24',deep=False)
+    with open('results/example_block.json', 'w') as f:
         Infura.save_data(f, [block])
