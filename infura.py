@@ -9,16 +9,13 @@ import json
 from hexbytes import HexBytes
 from web3.datastructures import AttributeDict
 from web3.logs import DISCARD
-# https://web3py.readthedocs.io/en/stable/web3.eth.html#web3.eth.Eth.get_block
-# https://towardsdatascience.com/access-ethereum-data-using-web3-py-infura-and-the-graph-d6fb981c2dc9
-# https://infura.io/dashboard/ethereum/b07f1f09ee5443c6b89fcfd1a4300fbc/settings
-
 
 class Infura:
     # infrua API key
     INFURA_API_KEY = 'b07f1f09ee5443c6b89fcfd1a4300fbc'
     w3: Web3 = Web3(Web3.HTTPProvider(
         f'https://mainnet.infura.io/v3/{INFURA_API_KEY}'))
+    # Etherscan API key
     ETHERSCAN_API_KEY = 'AMD3PDCXAPI6WKK8VJ6VGAZB5XJB2UHV1U'
     abi_endpoint = "https://api.etherscan.io/api?module=contract&action=getabi"
     ABI = {}
@@ -26,6 +23,13 @@ class Infura:
 
     @staticmethod
     def get_block(blockNum: Union[str, int] = 'latest', n: int = 1) -> Union[Block, List[Block]]:
+        """
+        Get a block from the block chain
+
+        :param blockNum: can either by a block hash (hex num) or the latest, defaults to 'latest'
+        :param n: how many blocks to get (parents), defaults to 1
+        :return: Either a single or a list of block objects
+        """
         res = []
         # init
         block: Dict = {'parentHash': blockNum}
@@ -37,20 +41,46 @@ class Infura:
 
     @staticmethod
     def get_transaction(txnHash: str) -> Transaction:
+        """
+        Get a transaction from the block chain
+
+        :param txnHash: the transaction hash
+        :return: a transaction object
+        """
         return Transaction(Infura.w3.eth.get_transaction(txnHash))
 
     @staticmethod
     def get_transaction_receipt(txnHash: str) -> Transaction:
+        """
+        Get a transaction receipt from the block chain
+
+        :param txnHash: the transaction hash
+        :return: a transaction receipt object
+        """
         return TransactionReceipt(Infura.w3.eth.get_transaction_receipt(txnHash))
 
     @staticmethod
     def save_data(f: TextIOWrapper, data: List[Block]) -> None:
+        """
+        Save a List of blocks to a file in JSON format
+
+        :param f: file descriptor
+        :param data: data to save
+        """
         f.write(Infura.jsonify([block.encode() for block in data]))
 
     @staticmethod
     def get_contract(contractAddr: HexBytes):
+        """
+        Gets the ethereum Solidity contract information and adds it to the ABI
+        class variable
+
+        :param contractAddr: addr of the contract
+        :return: Eth contract
+        """
         if contractAddr not in Infura.ABI:
             # 5 calls/second API limit
+            # ensure we don't hit it
             newTime = time()
             deltaTime = newTime - Infura._contract_times[4]
             Infura._contract_times = [newTime] + Infura._contract_times[:4]
@@ -90,6 +120,10 @@ class Infura:
 
 
 class TransactionReceipt:
+    """
+    A copy class for a transaction receipt, useful for type hinting
+
+    """
     def __init__(self, raw) -> None:
         raw = dict(raw)
         self.raw = raw
@@ -154,8 +188,11 @@ class TransactionReceipt:
             "_type": self._type
         }
 
-
 class Transaction:
+    """
+    A copy class for a transaction, useful for type hinting
+
+    """
     def __init__(self, raw) -> None:
         raw = dict(raw)
         self.blockHash: HexBytes = raw["blockHash"]
@@ -203,6 +240,10 @@ class Transaction:
         }
 
 class Block:
+    """
+    A copy class for a block, useful for type hinting
+
+    """
     def __init__(self, raw) -> None:
         raw = dict(raw)
         self.raw = raw
@@ -270,16 +311,7 @@ class Block:
         }
 
 
-# with open('known_bad.json','w') as f:
-#     save_data(f,get_n_blocks(w3,11876244,n=1))
-# txn = Infura.get_transaction_receipt(
-#     0x87b5d812c93001ec0d9f95c1922efed54b78b30e91805c09f86b1048e17c66d6)
-# txn2 = Infura.get_transaction_receipt(
-#     0xea1f0d4b4e427671350db3c2c24d48bf06460eb08f901bc1b02e43221d1c7a1c)
-# txn3 = Infura.get_transaction_receipt(
-#     0xf493d8254568a7c89f4e2ad9e9fb5a7243374d3cd873dea3657e9b7d83be4054)
-# a = [txn, txn2, txn3]
-txn = Infura.get_transaction(
-    0x87b5d812c93001ec0d9f95c1922efed54b78b30e91805c09f86b1048e17c66d6)
-with open('test123.json', 'w') as f:
-    Infura.save_data(f, [txn])
+if __name__ == "__main__":
+    block = Infura.get_block(0x4cb6e139755c24f5c295be2d1010aaeccab8f3003cf0d1944dd8642116e97a24)
+    with open('results/known_bad.json', 'w') as f:
+        Infura.save_data(f, [block])
