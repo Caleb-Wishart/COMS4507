@@ -11,6 +11,7 @@ from hexbytes import HexBytes
 from web3.datastructures import AttributeDict
 from web3.logs import DISCARD
 
+
 class Infura:
     # infrua API key
     INFURA_API_KEY = 'b07f1f09ee5443c6b89fcfd1a4300fbc'
@@ -39,11 +40,11 @@ class Infura:
         for _ in range(n):
             logging.info(f"Requesting Block '{block['parentHash']}' from Infura API")
             block: AttributeDict = Infura.w3.eth.get_block(block['parentHash'])
-            res.append(Block(block,deep))
+            res.append(Block(block, deep))
         return res if len(res) != 1 else res[0]
 
     @staticmethod
-    def get_transaction(txnHash: str) -> Transaction:
+    def get_transaction(txnHash: str, deep=True) -> Transaction:
         """
         Get a transaction from the block chain
 
@@ -54,7 +55,7 @@ class Infura:
         return Transaction(Infura.w3.eth.get_transaction(txnHash),deep)
 
     @staticmethod
-    def get_transaction_receipt(txnHash: str) -> Transaction:
+    def get_transaction_receipt(txnHash: str, deep=True) -> Transaction:
         """
         Get a transaction receipt from the block chain
 
@@ -65,12 +66,12 @@ class Infura:
         return TransactionReceipt(Infura.w3.eth.get_transaction_receipt(txnHash),deep)
 
     @staticmethod
-    def save_data(f: TextIOWrapper, data: List[Block]) -> None:
+    def save_data(f: TextIOWrapper, data) -> None:
         """
         Save a List of blocks to a file in JSON format
 
         :param f: file descriptor
-        :param data: data to save
+        :param data: temp to save
         """
         f.write(Infura.jsonify([block.encode() for block in data]))
 
@@ -100,7 +101,11 @@ class Infura:
                 sleep(2)
             if "Contract source code not verified" in abi:
                 return None
-            Infura.ABI[contractAddr] = json.loads(abi)
+            try:
+                Infura.ABI[contractAddr] = json.loads(abi)
+            except json.decoder.JSONDecodeError:
+                # problem decoding
+                return None
         logging.info(f"Requesting Contract '{contractAddr}' from Infura API")
         return Infura.w3.eth.contract(address=contractAddr, abi=Infura.ABI[contractAddr]["result"])
 
@@ -118,12 +123,12 @@ class Infura:
         return json.dumps(data, cls=HexJsonEncoder, indent=4, sort_keys=True)
 
     @staticmethod
-    def load_data(name: str = "data.json") -> List[Block]:
+    def load_data(name: str = "temp.json") -> List[Block]:
         with open(name, 'r') as f:
             try:
                 return json.loads(f.read())
             except JSONDecodeError:
-                raise Exception("File must contain json data")
+                raise Exception("File must contain json temp")
 
 
 class TransactionReceipt:
@@ -163,7 +168,11 @@ class TransactionReceipt:
                     # Find match between log's event signature and ABI's event signature
                     if event_signature_hex == receipt_event_signature_hex:
                         # Decode matching log
-                        decoded = contract.events[event["name"]]().processReceipt(self.raw, errors=DISCARD)
+                        try:
+                            decoded = contract.events[event["name"]]().processReceipt(self.raw, errors=DISCARD)
+                        except ValueError:
+                            # No matching events found or Multiple events found
+                            continue
                         log["decoded"] = decoded
         self.logsBloom: HexBytes = raw["logsBloom"]
         self.status: int = raw["status"]
@@ -196,6 +205,7 @@ class TransactionReceipt:
             "_type": self._type
         }
 
+
 class Transaction:
     """
     A copy class for a transaction, useful for type hinting
@@ -206,8 +216,8 @@ class Transaction:
         self.blockHash: HexBytes = raw["blockHash"]
         self.blockNumber: int = raw["blockNumber"]
         self._from: HexBytes = raw["from"]
-        self.gas: int = raw["gas"]
-        self.gasPrice: int = raw["gasPrice"]
+        self.gas: int = raw["gas"]  # value in wei
+        self.gasPrice: int = raw["gasPrice"]  # value in wei
         self._hash: HexBytes = raw["hash"]
         self.input: HexBytes = raw["input"]
         self.nonce: int = raw["nonce"]
@@ -217,9 +227,9 @@ class Transaction:
         self.index: int = raw["transactionIndex"]
         self.type: HexBytes = raw["type"]
         self.v: int = raw["v"]
-        self.value: int = raw["value"]
+        self.value: int = raw["value"]  # note: value here is in wei, convert to eth, do eth = value / 10**18
         self.receipt: TransactionReceipt = Infura.get_transaction_receipt(
-            self._hash) if deep else ""
+            self._hash.hex(), deep=deep) if deep else ""
 
     def __hash__(self) -> int:
         return self._hash
@@ -247,9 +257,12 @@ class Transaction:
             "receipt": self.receipt.encode() if self.receipt != "" else ""
         }
 
+
 class Block:
     """
     A copy class for a block, useful for type hinting
+
+    If deep is True, the transactions will be a list of Transaction objects.
 
     """
     def __init__(self, raw, deep) -> None:
@@ -274,7 +287,7 @@ class Block:
         self.totalDifficulty: int = raw["totalDifficulty"]
         self.transactionHashes: List[HexBytes] = raw["transactions"]
         self.transactions: List[Transaction] = [
-            Infura.get_transaction(txn) for txn in self.transactionHashes] if deep else ""
+            Infura.get_transaction(txn.hex()) for txn in self.transactionHashes] if deep else ""
         self.transactionsRoot: HexBytes = raw["transactionsRoot"]
         self.uncles: List[HexBytes] = raw["uncles"]
 
