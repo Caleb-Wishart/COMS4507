@@ -3,7 +3,7 @@ The script that implements the algorithm to detect if a pair of transactions
 form a frontrunning attack.
 """
 import os.path
-from infura import *
+from utils.infura import *
 from datetime import timedelta
 import pandas as pd
 
