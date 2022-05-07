@@ -2,6 +2,7 @@
 The script that runs the frontrunning detection algorithm
 """
 import sys
+import pandas as pd
 from utils.frontrun_algorithm import *
 from argparse import ArgumentParser
 import os
@@ -27,7 +28,16 @@ if __name__ == "__main__":
     print(f"Total number of blocks to be analyzed = {len(input_blocks)}")
 
     out_path = os.path.join(args.output_dir, "frontrun_records.csv")
-    df = None
+    if os.path.exists(out_path) and args.start_from != -1:
+        # resume previous work
+        print("Found previous dataset, now try to load and resume.")
+        df = pd.read_csv(out_path)
+        assert max(df["block_num"]) < args.start_from, \
+            f"latest record in {out_path} is block later than current starting block {args.start_from}."
+    else:
+        # start up new df
+        df = None
+
     block_count = 0
     transaction_count = 0
     start_time = time()
