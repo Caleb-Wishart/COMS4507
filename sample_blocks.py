@@ -48,7 +48,10 @@ def draw_random_blocks(extra_blocks: dict, n: int, all_blocks: pd.DataFrame,
     """
     blocks = []
     for start_inv, end_inv in intervals:
-        extra = list(extra_blocks[start_inv])
+        if extra_blocks:
+            extra = list(extra_blocks[start_inv])
+        else:
+            extra = []
         sample_num = n - len(extra)
         if sample_num <= 0:
             # extra ones already exceeds n limit
