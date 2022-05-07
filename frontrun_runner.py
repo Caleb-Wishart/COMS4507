@@ -23,6 +23,8 @@ if __name__ == "__main__":
     if not os.path.exists(args.input_blocks_file):
         print("Input blocks file does not exist", file=sys.stderr)
         exit(1)
+    if not os.path.exists(args.output_dir):
+        os.mkdir(args.output_dir)
 
     input_blocks = pd.read_csv(args.input_blocks_file)
     print(f"Total number of blocks to be analyzed = {len(input_blocks)}")
@@ -37,6 +39,8 @@ if __name__ == "__main__":
     else:
         # start up new df
         df = None
+
+
 
     block_count = 0
     transaction_count = 0

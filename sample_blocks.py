@@ -78,7 +78,7 @@ if __name__ == "__main__":
     parser.add_argument("-seed", type=int, default=1, help="The random seed")
     parser.add_argument("-days_to_monitor", type=int, default=7,
                         help="The number of days to be monitor")
-    parser.add_argument("-sample_size", default=10, type=int,
+    parser.add_argument("-sample_size", default=100, type=int,
                         help="The number of samples generated for each time period.")
     parser.add_argument("-first_start_timestamp", type=str,
                         default="2022-04-29 00:00:00",
