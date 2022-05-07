@@ -70,7 +70,7 @@ class FrontrunPair:
             fp.write(Infura.jsonify(out))
 
 
-def get_swap_gains(t1: Union[Transaction, dict], t2: Union[Transaction, dict], tol: float = .05):
+def get_swap_gains(t1: Union[Transaction, dict], t2: Union[Transaction, dict]):
     """
     This function checks if the transaction pair satisfies heuristics.
     If it does, then return the amount gained from the swap action (in wei),
@@ -93,7 +93,6 @@ def get_swap_gains(t1: Union[Transaction, dict], t2: Union[Transaction, dict], t
 
         :param t1: the suspected frontrunning transaction
         :param t2: the suspected backrunning transaction
-        :param tol: the torlence rate between t1's received amount and t2's send amount
         :return -inf if the two does not construct a frontrunning attack;
              (
                 the amount of gains from the swap action,
@@ -302,6 +301,7 @@ def check_block_transactions(current_block: Union[Block, dict], save: bool = Fal
     :param save: whether the found frontrunning pairs are saved
     :param save_dir: the directory to be saved
     :param data_frame: the dataframe the records all detection info
+    :return (data_frame, number of transactions scanned)
     """
     start_time = time()
 
@@ -432,7 +432,7 @@ def check_block_transactions(current_block: Union[Block, dict], save: bool = Fal
         print_and_write_stat(text, fp=out_log)
         if out_log:
             out_log.close()
-        return data_frame
+        return data_frame, original_number
 
     if save:
         # save csv file
@@ -471,4 +471,4 @@ def check_block_transactions(current_block: Union[Block, dict], save: bool = Fal
     print_and_write_stat(text, fp=out_log)
     if out_log:
         out_log.close()
-    return data_frame
+    return data_frame, original_number

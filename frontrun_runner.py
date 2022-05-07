@@ -28,6 +28,8 @@ if __name__ == "__main__":
 
     out_path = os.path.join(args.output_dir, "frontrun_records.csv")
     df = None
+    block_count = 0
+    transaction_count = 0
     start_time = time()
     for block_number in input_blocks["block_number"]:
         if block_number < args.start_from:
@@ -37,9 +39,15 @@ if __name__ == "__main__":
         print(f"Pulling block {block_number}...")
         current_block = Infura.get_block(blockNum=block_number, deep=True)
         print(f"Pulling finished, now starting to analyze block {block_number}...")
-        df = check_block_transactions(current_block=current_block, save=True, data_frame=df)
+        df, t_count = check_block_transactions(current_block=current_block, save=True, data_frame=df)
+        block_count += 1
+        transaction_count += t_count
         if df is not None:
             df.to_csv(out_path, index=False)
-        print(f"Checkpoint to block {block_number} saved.\n")
+            print(f"Checkpoint to block {block_number} saved.\n")
+        else:
+            print(f"No detected transactions after analyzed {block_number}")
     end_time = time()
-    print(f'Frontrunning analysis finished, now exit.\nProgram elapsed time = {timedelta(seconds=end_time - start_time)}')
+    print(f'Number of blocks analyzed = {block_count}, number of transactions scanned = {transaction_count}.\n'
+          f'Frontrunning analysis finished, now exit.\nProgram elapsed time ='
+          f' {timedelta(seconds=end_time - start_time)}')
