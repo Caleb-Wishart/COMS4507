@@ -77,7 +77,8 @@ if __name__ == "__main__":
                 exit(1)
 
         print(f"Pulling finished, now starting to analyze block {block_number}...")
-        df, t_count = check_block_transactions(current_block=current_block, save=True, data_frame=df)
+        df, t_count = check_block_transactions(current_block=current_block, save=True,
+                                               data_frame=df, save_dir=args.output_dir)
         block_count += 1
         transaction_count += t_count
         if df is not None:
