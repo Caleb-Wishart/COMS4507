@@ -14,8 +14,8 @@ from web3.logs import DISCARD
 
 class Infura:
     # infrua API key
-    # Caleb's: 'b07f1f09ee5443c6b89fcfd1a4300fbc'
-    INFURA_API_KEY = "ee4c35b8c3114586a74eda3b8b634228"
+    # jason's Infura key
+    INFURA_API_KEY = 'b07f1f09ee5443c6b89fcfd1a4300fbc'
     w3: Web3 = Web3(Web3.HTTPProvider(
         f'https://mainnet.infura.io/v3/{INFURA_API_KEY}'))
     # Etherscan API key
