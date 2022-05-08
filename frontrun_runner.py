@@ -2,13 +2,22 @@
 The script that runs the frontrunning detection algorithm
 """
 import sys
+import traceback
+
 import pandas as pd
+import requests.exceptions
+
 from utils.frontrun_algorithm import *
 from argparse import ArgumentParser
 import os
 
 
 if __name__ == "__main__":
+    # error count == 2 then exceeds quota
+    error_count = 0
+    jason_key = "ee4c35b8c3114586a74eda3b8b634228"
+    caleb_key = 'b07f1f09ee5443c6b89fcfd1a4300fbc'
+
     parser = ArgumentParser()
     parser.add_argument("-input_blocks_file", type=str, default="./temp/sample_blocks.csv",
                         help="The file that records all the blocks that needed to undertake"
@@ -40,8 +49,6 @@ if __name__ == "__main__":
         # start up new df
         df = None
 
-
-
     block_count = 0
     transaction_count = 0
     start_time = time()
@@ -51,7 +58,24 @@ if __name__ == "__main__":
             continue
         print(f"Now starting to analyze block {block_number}")
         print(f"Pulling block {block_number}...")
-        current_block = Infura.get_block(blockNum=block_number, deep=True)
+        current_block = None
+        try:
+            current_block = Infura.get_block(blockNum=block_number, deep=True)
+        except requests.exceptions.HTTPError as e:
+            traceback.print_exc()
+            if error_count != 1:
+                if Infura.INFURA_API_KEY == jason_key:
+                    print("Currently using Jason's key, now try Caleb's")
+                    Infura.INFURA_API_KEY = caleb_key
+                else:
+                    print("Currently using Caleb's key, now try Jason's")
+                    Infura.INFURA_API_KEY = jason_key
+                error_count += 1
+                current_block = Infura.get_block(blockNum=block_number, deep=True)
+            else:
+                print("error occurred more than once", file=sys.stderr)
+                exit(1)
+
         print(f"Pulling finished, now starting to analyze block {block_number}...")
         df, t_count = check_block_transactions(current_block=current_block, save=True, data_frame=df)
         block_count += 1

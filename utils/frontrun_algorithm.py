@@ -289,7 +289,7 @@ def print_and_write_stat(text: Union[str, FrontrunPair], end="\n", fp=None):
 
 
 def check_block_transactions(current_block: Union[Block, dict], save: bool = False, data_frame=None,
-                             save_dir: str = "../temp/frontrun/"):
+                             save_dir: str = "./temp/frontrun/"):
     """
     Check all transactions in a block to find out suspected fronrunning
     attack pairs.
