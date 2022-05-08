@@ -1,6 +1,7 @@
 """
 The script that runs the frontrunning detection algorithm
 """
+import datetime
 import sys
 import traceback
 import pandas as pd
@@ -22,6 +23,8 @@ def switch_keys():
         print("Currently using Caleb's key, now try Jason's")
         Infura.INFURA_API_KEY = jason_infura_key
         Infura.ETHERSCAN_API_KEY = jason_etherscan_key
+    Infura.w3 = Web3(Web3.HTTPProvider(
+        f'https://mainnet.infura.io/v3/{Infura.INFURA_API_KEY}'))
 
 
 if __name__ == "__main__":
@@ -83,10 +86,10 @@ if __name__ == "__main__":
                 switch_keys()
 
                 error_count += 1
-                error_time = time()
+                error_time = datetime.datetime.utcnow()
                 current_block = Infura.get_block(blockNum=block_number, deep=True)
-            elif error_time and timedelta(seconds=error_time - time()) >= timedelta(days=1):
-                # since last switch it has been more than one day
+            elif error_time and error_time.day != datetime.datetime.utcnow().day:
+                # since last error not in the same day
                 error_count = 0
                 error_time = None
 
