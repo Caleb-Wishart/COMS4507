@@ -33,8 +33,9 @@ def get_time_intervals(days: int, first_start: str, first_end: str) -> list:
     return intervals
 
 
-def draw_random_blocks(extra_blocks: dict, n: int, all_blocks: pd.DataFrame,
-                       intervals: list, sort_blocks: bool = True) -> pd.DataFrame:
+def draw_random_blocks(n: int, all_blocks: pd.DataFrame,
+                       intervals: list, sort_blocks: bool = True,
+                       extra_blocks: dict = None) -> pd.DataFrame:
     """
     Randomly draw n samples from all_blocks for each interval
 
@@ -118,24 +119,8 @@ if __name__ == "__main__":
     block_df = pd.read_csv(block_log_file)
     block_df["time"] = pd.to_datetime(block_df.time, format="%Y-%m-%d %H:%M:%S")
 
-
-    # todo: remove token log import later
-    token_log_file = "./data/token_log_0429_0505.csv"
-    token_df = pd.read_csv(token_log_file)
-    token_df["DateTime"] = pd.to_datetime(token_df.DateTime, format="%Y-%m-%d %H:%M:%S")
-    # dict in form key: start stamp of the day, value: list of blocks to be included for that day
-    intended_blocks = dict()
-    for start, end in time_intervals:
-        intended_blocks[start] = set()
-        # get all blocks included in the token_log_file
-        transactions = token_df[(token_df["DateTime"] >= start) & (token_df["DateTime"] <= end)]["Txhash"]
-        for tx_hash in transactions:
-            tx = Infura.get_transaction(tx_hash)
-            intended_blocks[start].add(tx.encode()["blockNumber"])
-
-
     # now generate samples and save
-    out = draw_random_blocks(extra_blocks=intended_blocks, n=sample_size, all_blocks=block_df,
+    out = draw_random_blocks(n=sample_size, all_blocks=block_df,
                              intervals=time_intervals)
     prev_save_path = args.sample_file_name.rsplit('/', 1)[0]
     if not os.path.exists(prev_save_path):

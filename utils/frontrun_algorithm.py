@@ -228,7 +228,7 @@ def legit_check(transaction: dict) -> tuple:
     3. added transfer or deposit logs to transaction so later record the
         contract addresses and use that to determine what tokens are swapped exactly
     4. for each swap event, check it is formulated in standard form
-        Swap (index_topic_1 address sender, uint256 amount0In, uint256 amount1In,
+        Swap(index_topic_1 address sender, uint256 amount0In, uint256 amount1In,
          uint256 amount0Out, uint256 amount1Out, index_topic_2 address to)
 
     :param transaction: The transaction to be processed
