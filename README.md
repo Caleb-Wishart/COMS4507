@@ -1,5 +1,4 @@
-
-![test](./static/sandwich_attack_banned.png){width=50%}
+<img src="./static/sandwich_attack_banned.png" width="200">
 
 # COMS4507-Project: Frontrunning and Insertion Attacks Detection Tool
  This repo contains the code segment for COMS4507 Project *Frontrunning and Sandwich attacks in Ethereum*.
