@@ -21,7 +21,7 @@ python3 sample_blocks.py -seed 1 -days_tp_monitor 7 -sample_size 10 \
 -all_blocks_csv ./data/blocks_0429_0505.csv \
 -sample_file_name ./temp/sample_blocks.csv
 ```
-Example full blocks info between Apr 29 and May 5 is available in [blocks_0429_0505.csv](./data/blocks_0429_0505.csv).
+Example full blocks info for 1-week time frame between Apr 29, 2022 and May 5, 2022 is available in [blocks_0429_0505.csv](./data/blocks_0429_0505.csv).
 
 
 
