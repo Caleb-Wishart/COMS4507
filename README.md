@@ -1,12 +1,12 @@
 <img src="./static/sandwich_attack_banned.png" width="200">
 
-# COMS4507-Project: Frontrunning and Insertion Attacks Detection Tool
+# COMS4507-Project: Insertion and Suppression Attacks Detection Tool
  This repo contains the code segment for COMS4507 Project *Frontrunning and Sandwich attacks in Ethereum*.
  
 The implemented component can be split into 3 parts:
 1. random block sampling tool [sample_blocks](./sample_blocks.py).
-2. frontrunning attack detection tool [frontrun_runner](./frontrun_runner.py)
-3. insertion attack detection tool ... #todo
+2. insertion attack detection tool [insertion_attack_runner](./insertion_attack_runner.py)
+3. suppression attack detection tool ... # todo
 
 
 
@@ -25,12 +25,12 @@ Example full blocks info for 1-week time frame between Apr 29, 2022 and May 5, 2
 
 
 
-# Frontrunning detection
-This [script](./frontrun_runner.py) is the runner of the sandwich attack detection tool.
+# Insertion Attack Detection
+This [script](./insertion_attack_runner.py) is the runner of the sandwich attack detection tool.
 Algorithm can be found in [here](./utils/frontrun_algorithm.py).
 
 
-Heuristics for sandwich attack detection (adpated from [Züst, 2021](https://pub.tik.ee.ethz.ch/students/2021-FS/BA-2021-07.pdf)):
+Heuristics for insertion attack detection (adpated from [Züst, 2021](https://pub.tik.ee.ethz.ch/students/2021-FS/BA-2021-07.pdf)):
 ```
 t1: frontrunning transaction
 t2: backrunning transaction
@@ -47,14 +47,14 @@ tv: victim transaction
 Usage:
 
 ```shell
-python3 frontrun_runner.py \
+python3 insertion_attack_runner.py \
 -input_blocks_file ./temp/sample_blocks.csv \
--output_dir ./temp/frontrun/
+-output_dir ./temp/insertion_attack/
 ```
 
 ### Backtesting
-- Frontrunning detection log of example can be found in [frontrun_records.csv](./temp/frontrun/frontrun_records.csv).
-Full transaction object of detected frontrunning instances are named as *block_blocknum* and can be found in [here](./temp/frontrun/).
+- Insertion attack detection log of example can be found in [insertion_attack_records.csv](temp/insertion_attack/insertion_attack_records.csv).
+Full transaction object of detected insertion attack instances are named as *block_blocknum* and can be found in [here](temp/insertion_attack/).
 
-- Some stats and result visualization are prepared in [frontrun_record_analysis.ipynb](./frontrun_record_analysis.ipynb).
+- Some stats and result visualization are prepared in [insertion_attack_record_analysis.ipynb](./insertion_attack_record_analysis.ipynb).
 

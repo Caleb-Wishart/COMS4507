@@ -12,9 +12,9 @@ import pandas as pd
 WETH_contract_address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 
 
-class FrontrunPair:
+class InsertionPair:
     """
-    The class the represents an identified fronrunning attack pair
+    The class the represents an identified insertion attack pair
     """
 
     def __init__(self, frontrun: dict, backrun: dict, gains: int, victim: dict = None,
@@ -275,7 +275,7 @@ def legit_check(transaction: dict) -> tuple:
     return res, WETH_in_swap, swap_format_correct
 
 
-def print_and_write_stat(text: Union[str, FrontrunPair], end="\n", fp=None):
+def print_and_write_stat(text: Union[str, InsertionPair], end="\n", fp=None):
     """
     Print the text to stdout and save to fp, if applicable
 
@@ -289,7 +289,7 @@ def print_and_write_stat(text: Union[str, FrontrunPair], end="\n", fp=None):
 
 
 def check_block_transactions(current_block: Union[Block, dict], save: bool = False, data_frame=None,
-                             save_dir: str = "./temp/frontrun/"):
+                             save_dir: str = "./temp/insertion_attack/"):
     """
     Check all transactions in a block to find out suspected fronrunning
     attack pairs.
@@ -298,7 +298,7 @@ def check_block_transactions(current_block: Union[Block, dict], save: bool = Fal
     swap event
 
     :param current_block: The block to be checked
-    :param save: whether the found frontrunning pairs are saved
+    :param save: whether the found insertion attack pairs are saved
     :param save_dir: the directory to be saved
     :param data_frame: the dataframe the records all detection info
     :return (data_frame, number of transactions scanned)
@@ -321,7 +321,7 @@ def check_block_transactions(current_block: Union[Block, dict], save: bool = Fal
             os.makedirs(save_dir)
         out_log = open(os.path.join(save_dir, name + "_" + "stats.log"), "w")
 
-    # heuristics:
+    # insertion attack heuristics:
     # each transaction has and only has one swap event, eliminate those
     # with number of swap event != 1
     transaction_idx = 0
@@ -348,7 +348,7 @@ def check_block_transactions(current_block: Union[Block, dict], save: bool = Fal
             transaction_receipt['event_counts'] = event_counts
 
     # the list that records the set of identified (t1, t2)
-    frontrunning_pairs: [FrontrunPair] = []
+    insertion_pairs: [InsertionPair] = []
     # lists that record hashes of t1, t2, victim transaction as well as transaction gains of each attack
     t1_hashes, t2_hashes, transaction_gains = [], [], []
     victim_hashes, victim_input_amounts = [], []
@@ -386,18 +386,18 @@ def check_block_transactions(current_block: Union[Block, dict], save: bool = Fal
 
             res = get_swap_gains(t1, t2)
             if res == -float("inf"):
-                # the 2 cannot form frontrunning attack pair
+                # the 2 cannot form insertion attack pair
                 continue
             gains, t1_gas_cost, t2_gas_cost = res
 
             tv, tv_input_amount = try_get_victim_transaction(current_block=current_block, t1=t1, t2=t2,
                                                              involved_contract_addresses=involved_addresses)
 
-            # suspected frontrunning pair, output text
-            pair = FrontrunPair(frontrun=t1, backrun=t2, gains=gains, victim=tv, victim_input_amount=tv_input_amount)
+            # suspected insertion attack pair, output text
+            pair = InsertionPair(frontrun=t1, backrun=t2, gains=gains, victim=tv, victim_input_amount=tv_input_amount)
 
             # update the lists above
-            frontrunning_pairs.append(pair)
+            insertion_pairs.append(pair)
             t1_hashes.append(t1_hash)
             t2_hashes.append(t2_hash)
             t1_gases.append(t1_gas_cost)
@@ -411,7 +411,7 @@ def check_block_transactions(current_block: Union[Block, dict], save: bool = Fal
             victim_input_amounts.append(tv_input_amount if tv_input_amount else "")
 
             print_and_write_stat("*" * 80, fp=out_log)
-            print_and_write_stat(f"Found frontrunning attack", fp=out_log)
+            print_and_write_stat(f"Found insertion attack", fp=out_log)
             print_and_write_stat(pair, fp=out_log)
             print_and_write_stat("*" * 80, fp=out_log, end="\n\n")
 
@@ -423,7 +423,7 @@ def check_block_transactions(current_block: Union[Block, dict], save: bool = Fal
     end_time = time()
 
     if attack_count == 0:
-        # no sandwich attack found, return early in case encounter error when
+        # no insertion attack found, return early in case encounter error when
         # doing min(), max() call on empty arrays
         text = f'Block {current_block["number"]} analyzed, \n' \
                f'total number of transactions in the block = {original_number},' \
