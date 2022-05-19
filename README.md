@@ -54,17 +54,13 @@ Algorithm can be found in [here](./utils/frontrun_algorithm.py).
 
 Heuristics for an Supression attack detection (adpated from [Torres, Camino, State, 2021](https://www.usenix.org/system/files/sec21-torres.pdf)).
 ```
-tI_{num}: insertion transaction where {num} is the position in similar transactions
-tv: victim transaction
+We 'cluster' together the transactions done by particular users in the block
 ```
-- there are at least 2 (configurable) transactions that swap ETH with other tokens (i.e. tI_1 is a buy action)
-- each insertion transactions swaps to the same other tokens (i.e. tI_1 is to DOGE then tI_2 must also be DOGE)
-- consider transaction that includes only ONE swap event in the transaction event
-- all transactions swap >= 0.1 ETH (configurable)
-- swap event in the transaction log is formulated in standard form `Swap(index_topic_1 address sender, uint256 amount0In, uint256 amount1In,
-         uint256 amount0Out, uint256 amount1Out, index_topic_2 address to)`.
-- all transactions in the cluster have consumed more than 21,000 gas units.
-
+- The number of transactions in the cluster must be larger than 5.
+- all transactions in the cluster have consumed more than 21,000 gas units each.
+- The ratio between gas used and gas limit must be larger than 99.9% for all transactions in the cluster.
+- We do not require the use of any particular technique to include potential new commers to the scene
+- We do not require the precense of a victim transaction
 
 ### Backtesting
 - Insertion attack detection log of example can be found in [insertion_attack_records.csv](temp/insertion_attack/insertion_attack_records.csv).
@@ -86,4 +82,4 @@ python3 ./quick_test.py -input_blocks_file="./temp/example_block.json"
 An an example saved block file is available in [example_block.json](./temp/example_block.json).
 
 This contains the data for 4 different blocks that had different identified attacks.
-The example should contain 3 attacks, 1 suppression and 2 insertion.
+The example should contain 6 attacks, 3 suppression and 3 insertion.

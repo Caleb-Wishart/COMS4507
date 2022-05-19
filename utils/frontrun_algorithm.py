@@ -74,16 +74,17 @@ class SupressionList:
     The class the represents identified supression attack transactions
     """
 
-    def __init__(self, transactions: List[dict], token: set, total_in: int,
-                 hashes: List, gases: List, participants: List, inputs: List):
+    def __init__(self, party : str, transactions : List, gas_ratio : List,
+                 gas_limits : List, gas_used : List, gas_cost : List,
+                 values : List):
         """
-            :param transactions: The supression transactions
-            :param token: The token swapped
-            :param total_in: The total amount of wei spent
-            :param hashes: The hashes of the transactions
-            :param gases: The gas used in the transactions
-            :param participants: The particiapnts
-            :param inputs: The input amount in wei for each transaction
+            :param party: The attacking party
+            :param transactions: The transactions involved
+            :param gas_ratio: The gas ratio's of the transactions
+            :param gas_limits: The gas limits of the transactions
+            :param gas_used: The gas used in the transactions
+            :param gas_cost: The gas cost of the transactions
+            :param values: The input amount in eth for each transaction
         """
 
         assert len(transactions) != 0, \
@@ -94,26 +95,25 @@ class SupressionList:
                 assert transaction["blockHash"] == other["blockHash"], \
                     "Two transactions not belong to same block"
 
-        assert len(token) != 0, \
-            "Must be at least one token to be considered supression"
+        self.party = party
         self.transactions = transactions
-        self.token = token
-        self.total_in = total_in
-        self.hashes = hashes
-        self.gases = gases
-        self.participants = participants
-        self.inputs = inputs
+        self.hashes = [t["_hash"].hex() for t in transactions]
+        self.gas_ratio = gas_ratio
+        self.gas_limits = gas_limits
+        self.gas_used = gas_used
+        self.gas_cost = gas_cost
+        self.values = values
 
     def __repr__(self):
         hashes = ",\n\t\t".join(self.hashes)
-        participants = ",\n\t\t".join([f"{p}\t({i})" for p,i in zip(self.participants,self.inputs)])
         text = f'In block: {((self.transactions[0])["blockHash"]).hex()}\n' \
                f'Supression Transactions\n' \
                f'\tTxn hashes:\n\t\t{hashes}\n' \
-               f'\tAttack Participants:\n\t\t{participants}\n' \
-               f"Tokens transfered: {self.token}\n" \
-               f"Total Gas Used: {sum(self.gases)}\n" \
-               f"Ethereum Input (Eth): {self.total_in / 10**18:.4f}"
+               f'\tAttacking party:\n\t\t{self.party}\n' \
+               f"Average Gas limit: {sum(self.gas_cost)/len(self.gas_cost)}\n" \
+               f"Average Gas ratio: {sum(self.gas_ratio)/len(self.gas_ratio):.4f}\n" \
+               f"Total Gas Used (Eth): {sum(self.gas_cost)/10**18:.4f}\n" \
+               f"Ethereum Input (Eth): {sum(self.values):.4f}"
         return text
 
     def save(self, file_name):
@@ -123,7 +123,7 @@ class SupressionList:
         if not file_name.endswith("json"):
             file_name = os.path.join(file_name, ".json")
 
-        out = {"txns": self.transactions, "token": self.token}
+        out = {"txns": self.transactions, "party": self.party}
         with open(file_name, "w") as fp:
             fp.write(Infura.jsonify(out))
 
@@ -600,37 +600,31 @@ def insertion_check_block_transactions(current_block: Union[Block, dict], save: 
 def supression_check_block_transactions(current_block: Union[Block, dict],
                                         save: bool = False, data_frame=None,
                                         save_dir: str = "./temp/supression_attack/",
-                                        num_tran: int = 2, min_eth: int = 0.1):
+                                        num_tran: int = 5, gas_min = 21000, ratio = 99.9):
     """
     Check all transactions in a block to find out suspected supression
     frontrunning attack pairs.
 
     Assumptions: we do no require the presence of a victim transaction
 
+    We 'cluster' together the transactions done by particular users in the block
     Hueristics:
-        Terms:
-            tI_{num}: insertion transaction where {num} is the
-                position in similar transactions
-            tv: victim transaction
+        - The number of transactions in the cluster must be larger than num_tran (5 default).
+        - all transactions in the cluster have consumed more than 21,000 gas
+        units each (default for a transaction).
+        - The ratio between gas used and gas limit must be larger than 99.9% for all transactions in the cluster.
+        - We do not require the use of any particular technique to include potential new commers to the scene
+        - We do not require the precense of a victim transaction
 
-        - there are at least num_tran (default 2) transactions that swap
-            ETH with other tokens (i.e. tI_1 is a buy action)
-        - each insertion transactions swaps to the same other tokens
-            (i.e. tI_1 is to DOGE then tI_2 must also be DOGE)
-        - consider transaction that includes only ONE swap event in the
-            transaction event
-        - all transactions swap >= min_eth ETH (default 0.1)
-        - swap event in the transaction log is formulated in standard form
-            `Swap(index_topic_1 address sender, uint256 amount0In,
-                uint256 amount1In, uint256 amount0Out, uint256 amount1Out,
-                index_topic_2 address to)`.
-        - all transactions within a cluster must have consumed more than
-            21,000 gas units. (More than standard limit)
+    Further could be done to analyse the byte code of the ABI used to reduce false positives
 
     :param current_block: The block to be checked
     :param save: whether the found supression attack blocks are saved
     :param save_dir: the directory to be saved
     :param data_frame: the dataframe the records all detection info
+    :param num_tran: the min number of transactions for a cluster
+    :param gas_min: the min amount of gas required for a txn in a cluster
+    :param ratio: the ratio between the gas limit and gas used
     :return (data_frame, number of transactions scanned)
     """
     start_time = time()
@@ -654,77 +648,40 @@ def supression_check_block_transactions(current_block: Union[Block, dict],
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
         out_log = open(os.path.join(save_dir, name + "_" + "stats.log"), "w")
+    # cluster by user
+    parties = {}
+    for txn in transactions:
+        party = txn["_from"]
+        txns, gas_ratio, gas_limits, gas_used, gas_cost, values = parties.get(party,([], [],[],[], [], []))
+        txns.append(txn)
+        gas_ratio.append(txn["receipt"]["gasUsed"] / txn["gas"] * 100)
+        gas_limits.append(txn["gas"])
+        gas_used.append(txn["receipt"]["gasUsed"])
+        gas_cost.append(txn["receipt"]["effectiveGasPrice"] * txn["receipt"]["gasUsed"])
+        values.append(txn["value"] / 10**18)
+        parties[party] = (txns, gas_ratio, gas_limits, gas_used, gas_cost, values)
 
-    # supression attack heuristics:
-    # each transaction has and only has one swap event, eliminate those
-    # with number of swap event != 1
-    transaction_idx = 0
-    while transaction_idx < len(transactions):
-        transaction = transactions[transaction_idx]
-        transaction_hash = transaction["_hash"].hex()
-        transaction_receipt = transaction["receipt"]
-        # if swap event available, transaction["swap_event"] shortcut added here
-        event_counts, weth_in_swap, swap_format_correct = legit_check(transaction=transaction)
-        swap_count = event_counts.get("Swap")
-
-        if not weth_in_swap:
-            # transaction not involving WETH as one of the swap tokens
-            del transactions[transaction_idx]
-        elif not swap_count or swap_count != 1:
-            # number of swap event != 1
-            del transactions[transaction_idx]
-        elif not swap_format_correct:
-            # swap function not standardized
-            del transactions[transaction_idx]
-        else:
-            transaction_idx += 1
-            # add event counts to each transaction receipt in case it is useful later
-            transaction_receipt['event_counts'] = event_counts
-
-    counts = {}
-    attacks = {}
-    for t in transactions:
-        token = get_token_transferred_or_deposited(t)
-        if len(token) != 1:
-            # more than 1 token swapped
-            continue
-        token, *_ = token
-        l, val, t_input, hashes, gases, participants, inputs = counts.get(token, ([],0, 0, [], [], [], []))
-        res = get_input_amount(t)
-        if res == -float("inf"):
-            # one transaction not a swap input
-            continue
-        txn_input, txn_output, txn_gas_cost = res
-        if txn_input / 10**18 < min_eth:
-            continue
-        if t["receipt"]["gasUsed"] < 21000:
-            continue
-
-        l += [t]
-        val += 1
-        t_input += txn_input
-        hashes.append(t["_hash"].hex())
-        gases.append(txn_gas_cost)
-        participants.append(t["_from"])
-        inputs.append(t_input)
-        counts[token] = (l, val, t_input, hashes, gases, participants, inputs)
-        if val >= num_tran:
-            attacks[token] = counts[token]
     sups: List[SupressionList] = []
-    attack_count = len(attacks)
-    for token, attack in attacks.items():
-        txns, _, value, hashes,  gases, participants, inputs = attack
-        supression = SupressionList(txns, token, value, hashes, gases, participants, inputs)
+
+    for party, data in parties.items():
+        txns, gas_ratio, gas_limits, gas_used, gas_cost, values = data
+        if len(txns) < num_tran:
+            continue
+        if min(gas_ratio) < ratio:
+            continue
+        if min(gas_used) < gas_min:
+            continue
+        supression = SupressionList(party, txns, gas_ratio, gas_limits, gas_used, gas_cost, values)
         sups.append(supression)
         print_and_write_stat("*" * 80, fp=out_log)
-        print_and_write_stat(f"Found supression attack", fp=out_log)
+        print_and_write_stat(f"Found suppression attack", fp=out_log)
         print_and_write_stat(supression, fp=out_log)
         print_and_write_stat("*" * 80, fp=out_log, end="\n\n")
         # save the pair to folder, named with attack_count
         if save:
-            supression.save(file_name=os.path.join(save_dir, f"{attack_count}.json"))
+            supression.save(file_name=os.path.join(save_dir, f"{party}.json"))
     end_time = time()
-
+    attack_count = len(sups)
     if attack_count == 0:
         # no insertion attack found, return early in case encounter error when
         # doing min(), max() call on empty arrays
@@ -743,11 +700,12 @@ def supression_check_block_transactions(current_block: Union[Block, dict],
             hashes = attack.hashes
             df = pd.DataFrame(data={"block_num": [current_block["number"]] * len(hashes),
                                     "attack number" : [attack_no] * len(hashes),
-                                    "attack_txn": attack.hashes, "t1_from": attack.participants,
-                                    "wei_committed": attack.inputs,
-                                    "gas_committed": attack.gases,
-                                    "token_attacked": [attack.token] * len(hashes),
-                                    "total_input_wei": [attack.total_in] * len(hashes)})
+                                    "attack_txn": hashes, "t1_from": [attack.party] * len(hashes),
+                                    "eth_commited": attack.values,
+                                    "gas_committed": attack.gas_cost,
+                                    "gas_limits": attack.gas_limits,
+                                    "gas_used": attack.gas_used,
+                                    "total_input_wei": [sum(attack.gas_cost)] * len(hashes)})
             df.to_csv(os.path.join(save_dir, name + "_" + "stats.csv"), index=False)
 
             if data_frame is not None:
@@ -764,14 +722,11 @@ def supression_check_block_transactions(current_block: Union[Block, dict],
            f' attacks found = {attack_count}, percentage = {(attack_count / original_number) * 100 :4f}%.\n'
     text += f"max number of attack txns: {max([len(s.transactions) for s in sups])};\n"
     text += f"min number of attack txns: {min([len(s.transactions) for s in sups])}.\n"
-    text += f"max number of attack participants: {max([len(s.participants) for s in sups])};\n"
-    text += f"min number of attack participants: {min([len(s.participants) for s in sups])}.\n"
-    text += f"max wei used: {max([s.total_in for s in sups])};\n"
-    text += f"min wei used: {min([s.total_in for s in sups])}.\n"
-    text += f"max gas used: {max([sum(s.gases) for s in sups])};\n"
-    text += f"min gas used: {min([sum(s.gases) for s in sups])}.\n"
-    attacked_tokens = [s.token for s in sups]
-    text += f"Most common attacked token = {max(attacked_tokens, key=attacked_tokens.count)}.\n"
+    text += f"max gas used: {max([max(s.gas_used) for s in sups])};\n"
+    text += f"min gas used: {min([min(s.gas_used) for s in sups])}.\n"
+    text += f"max ratio used: {max([max(s.gas_ratio) for s in sups]):2f};\n"
+    text += f"min ratio used: {min([min(s.gas_ratio) for s in sups]):2f}.\n"
+    text += f"cumulative gas cost: {sum([sum(s.gas_cost) for s in sups])}.\n"
     text += f'Time elapsed = {timedelta(seconds=(end_time - start_time))}.'
     print_and_write_stat(text, fp=out_log)
     if out_log:

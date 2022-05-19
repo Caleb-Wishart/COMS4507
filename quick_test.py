@@ -37,7 +37,7 @@ if __name__ == "__main__":
         print(f"Building {block_number} finished in {timedelta(seconds=time() - retrieve_time)}, now starting to analyze block {block_number} for insertion attacks...")
         _, t_count1 = insertion_check_block_transactions(current_block=current_block)
         print(f"Insertion analysis finished, now starting to analyze block {block_number} for supression attacks...")
-        _, t_count2 = supression_check_block_transactions(current_block=current_block, num_tran=3,min_eth=0.25)
+        _, t_count2 = supression_check_block_transactions(current_block=current_block)
         if t_count1 != t_count2:
             print(f"Unexpected error: Transaction counts are not the same -> insertion({t_count1}), supression({t_count2})")
         t_count =  t_count1
