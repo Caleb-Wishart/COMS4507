@@ -151,10 +151,10 @@ class TransactionReceipt:
         self.contractAddress: HexBytes = raw["contractAddress"]
         self.cumulativeGasUsed: int = raw["cumulativeGasUsed"]
         self.effectiveGasPrice: int = raw["effectiveGasPrice"]
-        self._from: HexBytes = raw.get("from","")
+        self._from: str = raw.get("from","")
         if self._from == "":
-            self._from: HexBytes = HexBytes(raw.get("_from",""))
-        self.gasUsed: HexBytes = raw["gasUsed"]
+            self._from: str = raw.get("_from","")
+        self.gasUsed: int = raw["gasUsed"]
         self.logs: List = [dict(log) for log in raw["logs"]]
         if deep:
             for log in self.logs:
@@ -185,14 +185,14 @@ class TransactionReceipt:
                         log["decoded"] = decoded
         self.logsBloom: HexBytes = raw["logsBloom"]
         self.status: int = raw["status"]
-        self._to: HexBytes = raw.get("to","")
+        self._to: str = raw.get("to","")
         if self._to == "":
-            self._to: HexBytes = HexBytes(raw.get("_to",""))
+            self._to: str = raw.get("_to","")
         self.transactionHash: HexBytes = raw["transactionHash"]
         self.transactionIndex: int = raw["transactionIndex"]
-        self._type: HexBytes = raw.get("type","")
+        self._type: str = raw.get("type","")
         if self._type == "":
-            self._type: HexBytes = HexBytes(raw.get("_type",""))
+            self._type: str = raw.get("_type","")
 
     def __hash__(self) -> int:
         return self.transactionHash
@@ -240,25 +240,25 @@ class Transaction:
         raw = dict(raw)
         self.blockHash: HexBytes = raw["blockHash"]
         self.blockNumber: int = raw["blockNumber"]
-        self._from: HexBytes = raw.get("from","")
+        self._from: str = raw.get("from","")
         if self._from == "":
-            self._from: HexBytes = HexBytes(raw.get("_from",""))
+            self._from: str = raw.get("_from","")
         self.gas: int = raw["gas"]  # value in wei
         self.gasPrice: int = raw["gasPrice"]  # value in wei
         self._hash: HexBytes = raw.get("hash","")
         if self._hash == "":
             self._hash: HexBytes = HexBytes(raw.get("_hash",""))
-        self.input: HexBytes = raw["input"]
+        self.input: str = raw["input"]
         self.nonce: int = raw["nonce"]
         self.r: HexBytes = raw["r"]
         self.s: HexBytes = raw["s"]
-        self._to: HexBytes = raw.get("to","")
+        self._to: str = raw.get("to","")
         if self._to == "":
-            self._to: HexBytes = HexBytes(raw.get("_to",""))
-        self.index: HexBytes = raw.get("transactionIndex",None)
+            self._to: str = raw.get("_to","")
+        self.index: int = raw.get("transactionIndex",None)
         if self.index == None:
-            self.index: HexBytes = raw.get("index",0)
-        self.type: HexBytes = raw["type"]
+            self.index: int = raw.get("index",0)
+        self.type: str = raw["type"]
         self.v: int = raw["v"]
         self.value: int = raw["value"]  # note: value here is in wei, convert to eth, do eth = value / 10**18
         if deep:
