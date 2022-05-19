@@ -74,10 +74,16 @@ class SupressionList:
     The class the represents identified supression attack transactions
     """
 
-    def __init__(self, transactions: List[dict], token: set, total_in: int):
+    def __init__(self, transactions: List[dict], token: set, total_in: int,
+                 hashes: List, gases: List, participants: List, inputs: List):
         """
             :param transactions: The supression transactions
-            :param victim: The victim transaction (if there exists one)
+            :param token: The token swapped
+            :param total_in: The total amount of wei spent
+            :param hashes: The hashes of the transactions
+            :param gases: The gas used in the transactions
+            :param participants: The particiapnts
+            :param inputs: The input amount in wei for each transaction
         """
 
         assert len(transactions) != 0, \
@@ -93,17 +99,20 @@ class SupressionList:
         self.transactions = transactions
         self.token = token
         self.total_in = total_in
-        self.hashes = [t["_hash"].hex() for t in self.transactions]
-        self.participants = set([t["_from"].hex() for t in self.transactions])
+        self.hashes = hashes
+        self.gases = gases
+        self.participants = participants
+        self.inputs = inputs
 
     def __repr__(self):
         hashes = ",\n\t\t".join(self.hashes)
-        participants = ",\n\t\t".join(self.participants)
+        participants = ",\n\t\t".join([f"{p}\t({i})" for p,i in zip(self.participants,self.inputs)])
         text = f'In block: {((self.transactions[0])["blockHash"]).hex()}\n' \
                f'Supression Transactions\n' \
                f'\tTxn hashes:\n\t\t{hashes}\n' \
                f'\tAttack Participants:\n\t\t{participants}\n' \
-               f"\nTokens transfered: {self.token}\n" \
+               f"Tokens transfered: {self.token}\n" \
+               f"Total Gas Used: {sum(self.gases)}\n" \
                f"Ethereum Input (Eth): {self.total_in / 10**18:.4f}"
         return text
 
@@ -588,8 +597,10 @@ def insertion_check_block_transactions(current_block: Union[Block, dict], save: 
         out_log.close()
     return data_frame, original_number
 
-def supression_check_block_transactions(current_block: Union[Block, dict], save: bool = False, data_frame=None,
-                             save_dir: str = "./temp/supression_attack/", num_tran: int = 5, min_eth: int = 1):
+def supression_check_block_transactions(current_block: Union[Block, dict],
+                                        save: bool = False, data_frame=None,
+                                        save_dir: str = "./temp/supression_attack/",
+                                        num_tran: int = 2, min_eth: int = 1):
     """
     Check all transactions in a block to find out suspected supression
     frontrunning attack pairs.
@@ -602,17 +613,19 @@ def supression_check_block_transactions(current_block: Union[Block, dict], save:
                 position in similar transactions
             tv: victim transaction
 
-        - there are at least num_tran (default 5) transactions that swap
+        - there are at least num_tran (default 2) transactions that swap
             ETH with other tokens (i.e. tI_1 is a buy action)
         - each insertion transactions swaps to the same other tokens
             (i.e. tI_1 is to DOGE then tI_2 must also be DOGE)
         - consider transaction that includes only ONE swap event in the
             transaction event
-        - all insertion transactions swap >= min_eth ETH (default 1)
+        - all transactions swap >= min_eth ETH (default 1)
         - swap event in the transaction log is formulated in standard form
             `Swap(index_topic_1 address sender, uint256 amount0In,
                 uint256 amount1In, uint256 amount0Out, uint256 amount1Out,
                 index_topic_2 address to)`.
+        - all transactions within a cluster must have consumed more than
+            21,000 gas units. (More than standard limit)
 
     :param current_block: The block to be checked
     :param save: whether the found supression attack blocks are saved
@@ -676,7 +689,7 @@ def supression_check_block_transactions(current_block: Union[Block, dict], save:
             # more than 1 token swapped
             continue
         token, *_ = token
-        l, val, t_input = counts.get(token, ([],0, 0))
+        l, val, t_input, hashes, gases, participants, inputs = counts.get(token, ([],0, 0, [], [], [], []))
         res = get_input_amount(t)
         if res == -float("inf"):
             # one transaction not a swap input
@@ -684,17 +697,24 @@ def supression_check_block_transactions(current_block: Union[Block, dict], save:
         txn_input, txn_output, txn_gas_cost = res
         if txn_input / 10**18 < min_eth:
             continue
-        val += 1
+        if t["receipt"]["gasUsed"] < 21000:
+            continue
+
         l += [t]
+        val += 1
         t_input += txn_input
-        counts[token] = (l, val, t_input)
+        hashes.append(t["_hash"].hex())
+        gases.append(txn_gas_cost)
+        participants.append(t["_from"])
+        inputs.append(t_input)
+        counts[token] = (l, val, t_input, hashes, gases, participants, inputs)
         if val >= num_tran:
-            attacks[token] = (l, t_input)
+            attacks[token] = counts[token]
     sups: List[SupressionList] = []
     attack_count = len(attacks)
     for token, attack in attacks.items():
-        txns, value = attack
-        supression = SupressionList(txns, token, value)
+        txns, _, value, hashes,  gases, participants, inputs = attack
+        supression = SupressionList(txns, token, value, hashes, gases, participants, inputs)
         sups.append(supression)
         print_and_write_stat("*" * 80, fp=out_log)
         print_and_write_stat(f"Found supression attack", fp=out_log)
@@ -719,13 +739,13 @@ def supression_check_block_transactions(current_block: Union[Block, dict], save:
 
     if save:
         for attack_no, attack in enumerate(sups):
-
-            hashes = [t["_hash"].hex() for t in attack.transactions]
-            participants = [t["_from"].hex() for t in attack.transactions]
             # save csv file
+            hashes = attack.hashes
             df = pd.DataFrame(data={"block_num": [current_block["number"]] * len(hashes),
                                     "attack number" : [attack_no] * len(hashes),
-                                    "attack_txn": hashes, "t1_from": participants,
+                                    "attack_txn": attack.hashes, "t1_from": attack.participants,
+                                    "wei_committed": attack.inputs,
+                                    "gas_committed": attack.gases,
                                     "token_attacked": [attack.token] * len(hashes),
                                     "total_input_wei": [attack.total_in] * len(hashes)})
             df.to_csv(os.path.join(save_dir, name + "_" + "stats.csv"), index=False)
@@ -748,6 +768,8 @@ def supression_check_block_transactions(current_block: Union[Block, dict], save:
     text += f"min number of attack participants: {min([len(s.participants) for s in sups])}.\n"
     text += f"max wei used: {max([s.total_in for s in sups])};\n"
     text += f"min wei used: {min([s.total_in for s in sups])}.\n"
+    text += f"max gas used: {max([sum(s.gases) for s in sups])};\n"
+    text += f"min gas used: {min([sum(s.gases) for s in sups])}.\n"
     attacked_tokens = [s.token for s in sups]
     text += f"Most common attacked token = {max(attacked_tokens, key=attacked_tokens.count)}.\n"
     text += f'Time elapsed = {timedelta(seconds=(end_time - start_time))}.'

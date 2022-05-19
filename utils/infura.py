@@ -153,7 +153,7 @@ class TransactionReceipt:
         self.effectiveGasPrice: int = raw["effectiveGasPrice"]
         self._from: HexBytes = raw.get("from","")
         if self._from == "":
-            self._from: HexBytes = raw.get("_from","")
+            self._from: HexBytes = HexBytes(raw.get("_from",""))
         self.gasUsed: HexBytes = raw["gasUsed"]
         self.logs: List = [dict(log) for log in raw["logs"]]
         if deep:
@@ -187,12 +187,12 @@ class TransactionReceipt:
         self.status: int = raw["status"]
         self._to: HexBytes = raw.get("to","")
         if self._to == "":
-            self._to: HexBytes = raw.get("_to","")
+            self._to: HexBytes = HexBytes(raw.get("_to",""))
         self.transactionHash: HexBytes = raw["transactionHash"]
         self.transactionIndex: int = raw["transactionIndex"]
         self._type: HexBytes = raw.get("type","")
         if self._type == "":
-            self._type: HexBytes = raw.get("_type","")
+            self._type: HexBytes = HexBytes(raw.get("_type",""))
 
     def __hash__(self) -> int:
         return self.transactionHash
