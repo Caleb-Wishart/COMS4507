@@ -118,7 +118,7 @@ if __name__ == "__main__":
                                                data_frame=df, save_dir=args.output_dir)
         print(f"Insertion analysis finished, now starting to analyze block {block_number} for supression attacks...")
         df_sup, t_count2 = supression_check_block_transactions(current_block=current_block, save=True,
-                                               data_frame=df_sup, save_dir=args.supp_output_dir, num_tran=3,min_eth=0.25)
+                                               data_frame=df_sup, save_dir=args.supp_output_dir)
         if t_count1 != t_count2:
             print(f"Unexpected error: Transaction counts are not the same -> insertion({t_count1}), supression({t_count2})")
         t_count =  t_count1

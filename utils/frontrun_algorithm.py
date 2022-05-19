@@ -600,7 +600,7 @@ def insertion_check_block_transactions(current_block: Union[Block, dict], save: 
 def supression_check_block_transactions(current_block: Union[Block, dict],
                                         save: bool = False, data_frame=None,
                                         save_dir: str = "./temp/supression_attack/",
-                                        num_tran: int = 2, min_eth: int = 1):
+                                        num_tran: int = 2, min_eth: int = 0.1):
     """
     Check all transactions in a block to find out suspected supression
     frontrunning attack pairs.
@@ -619,7 +619,7 @@ def supression_check_block_transactions(current_block: Union[Block, dict],
             (i.e. tI_1 is to DOGE then tI_2 must also be DOGE)
         - consider transaction that includes only ONE swap event in the
             transaction event
-        - all transactions swap >= min_eth ETH (default 1)
+        - all transactions swap >= min_eth ETH (default 0.1)
         - swap event in the transaction log is formulated in standard form
             `Swap(index_topic_1 address sender, uint256 amount0In,
                 uint256 amount1In, uint256 amount0Out, uint256 amount1Out,

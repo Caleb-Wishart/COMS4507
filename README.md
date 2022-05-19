@@ -5,9 +5,8 @@
 
 The implemented component can be split into 3 parts:
 1. random block sampling tool [sample_blocks](./sample_blocks.py).
-2. insertion attack detection tool [insertion_attack_runner](./insertion_attack_runner.py)
-3. suppression attack detection tool ... # todo
-
+2. frontrunnig attack detection tool [frontrun_runner](./frontrun_runner.py)
+3. quick testing / example tool [quick_test](./quick_test.py)
 
 
 # Block sampling
@@ -28,7 +27,6 @@ Example full blocks info for 1-week time frame between Apr 29, 2022 and May 5, 2
 [frontrun_runner](./frontrun_runner.py) is the runner of the sandwich attack detection tool.
 Algorithm can be found in [here](./utils/frontrun_algorithm.py).
 
-
 Heuristics for insertion attack detection (adpated from [Züst, 2021](https://pub.tik.ee.ethz.ch/students/2021-FS/BA-2021-07.pdf)):
 ```
 t1: frontrunning transaction
@@ -46,26 +44,46 @@ tv: victim transaction
 Usage:
 
 ```shell
-python3 insertion_attack_runner.py \
+python3 frontrun_runner.py \
 -input_blocks_file ./temp/sample_blocks.csv \
 -output_dir ./temp/insertion_attack/
 ```
+# Suppression Attack Detection
+[frontrun_runner](./frontrun_runner.py) is also the runner of the suppression attack detection tool.
+Algorithm can be found in [here](./utils/frontrun_algorithm.py).
 
-Heuristics for an Supression attack detection.
+Heuristics for an Supression attack detection (adpated from [Torres, Camino, State, 2021](https://www.usenix.org/system/files/sec21-torres.pdf)).
 ```
 tI_{num}: insertion transaction where {num} is the position in similar transactions
 tv: victim transaction
 ```
-- there are at least 5 (configurable) transactions that swap ETH with other tokens (i.e. tI_1 is a buy action)
+- there are at least 2 (configurable) transactions that swap ETH with other tokens (i.e. tI_1 is a buy action)
 - each insertion transactions swaps to the same other tokens (i.e. tI_1 is to DOGE then tI_2 must also be DOGE)
 - consider transaction that includes only ONE swap event in the transaction event
-- all insertion transactions swap >= 1 ETH (configurable)
+- all transactions swap >= 0.1 ETH (configurable)
 - swap event in the transaction log is formulated in standard form `Swap(index_topic_1 address sender, uint256 amount0In, uint256 amount1In,
          uint256 amount0Out, uint256 amount1Out, index_topic_2 address to)`.
+- all transactions in the cluster have consumed more than 21,000 gas units.
 
 
 ### Backtesting
 - Insertion attack detection log of example can be found in [insertion_attack_records.csv](temp/insertion_attack/insertion_attack_records.csv).
 Full transaction object of detected insertion attack instances are named as *block_blocknum* and can be found in [here](temp/insertion_attack/).
 
-- Some stats and result visualization are prepared in [frontrun_record_analysis.ipynb](./frontrun_record_analysis.ipynb).
+- Some stats and result visualization are prepared in [insertion_attack_record_analysis.ipynb](./insertion_attack_record_analysis.ipynb).
+
+# Quick Testing
+[quick_test](./quick_test.py) provides functionality to quickly show an example result of running the program.
+
+This file uses a given json file with saved block data instead of querying the Etherscan API for data.
+
+Usage:
+
+```shell
+python3 ./quick_test.py -input_blocks_file="./temp/example_block.json"
+```
+
+An an example saved block file is available in [example_block.json](./temp/example_block.json).
+
+This contains the data for 4 different blocks that had different identified attacks.
+The example should contain 3 attacks, 1 suppression and 2 insertion.
