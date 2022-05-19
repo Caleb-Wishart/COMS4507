@@ -336,7 +336,7 @@ class Block:
         self.timestamp: int = raw["timestamp"]
         self.totalDifficulty: int = raw["totalDifficulty"]
         self.transactionHashes: List[HexBytes] = raw["transactions"]
-        if deep:
+        if deep and not decode:
             self.transactions: List[Transaction] = []
             for index, txn in enumerate(self.transactionHashes):
                 print(f"\x1b[1KBlock[{self.number}] loading transaction "
@@ -345,11 +345,10 @@ class Block:
                       ,end="\r")
                 self.transactions.append(Infura.get_transaction(txn.hex()))
             print("\x1b[1K",end="\r")
-        else:
-            self.transactions = [Transaction(t,deep,decode) for t in raw.get("transactions","")]
         self.transactionsRoot: HexBytes = raw["transactionsRoot"]
         self.uncles: List[HexBytes] = raw["uncles"]
         if decode:
+            self.transactions = [Transaction(t,deep,decode) for t in raw.get("transactions","")]
             self.decoding()
 
     def __hash__(self) -> int:

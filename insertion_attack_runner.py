@@ -113,7 +113,7 @@ if __name__ == "__main__":
                 # error twice with interval less than one day
                 print("error occurred more than once", file=sys.stderr)
                 exit(1)
-        print(f"Pulling finished in {timedelta(seconds=time() - start_time)}, now starting to analyze block {block_number} for insertion attacks...")
+        print(f"Pulling finished in {timedelta(seconds=time() - retrieve_time)}, now starting to analyze block {block_number} for insertion attacks...")
         df, t_count1 = insertion_check_block_transactions(current_block=current_block, save=True,
                                                data_frame=df, save_dir=args.output_dir)
         print(f"Insertion analysis finished, now starting to analyze block {block_number} for supression attacks...")
@@ -127,13 +127,9 @@ if __name__ == "__main__":
         if df is not None:
             df.to_csv(out_path, index=False)
             print(f"Checkpoint to block {block_number} saved for insertion attack.\n")
-        else:
-            print(f"No detected insertion transactions after analyzed {block_number}")
         if df_sup is not None:
             df_sup.to_csv(sup_out_path, index=False)
             print(f"Checkpoint to block {block_number} saved for supression attack.\n")
-        else:
-            print(f"No detected supression transactions after analyzed {block_number}")
     end_time = time()
     print(f'Number of blocks analyzed = {block_count}, number of transactions scanned = {transaction_count}.\n'
           f'Insertion attack analysis finished, now exit.\nProgram elapsed time ='
