@@ -124,6 +124,8 @@ class Infura:
                     return obj.hex()
                 if isinstance(obj, AttributeDict):
                     return dict(obj)
+                if isinstance(obj, bytes):
+                    return HexBytes(obj).hex()
                 return super().default(obj)
         return json.dumps(data, cls=HexJsonEncoder, indent=4, sort_keys=True)
 
@@ -141,7 +143,7 @@ class TransactionReceipt:
     A copy class for a transaction receipt, useful for type hinting
 
     """
-    def __init__(self, raw, deep) -> None:
+    def __init__(self, raw, deep, decode=False) -> None:
         raw = dict(raw)
         self.raw = raw
         self.blockHash: HexBytes = raw["blockHash"]
@@ -149,7 +151,9 @@ class TransactionReceipt:
         self.contractAddress: HexBytes = raw["contractAddress"]
         self.cumulativeGasUsed: int = raw["cumulativeGasUsed"]
         self.effectiveGasPrice: int = raw["effectiveGasPrice"]
-        self._from: HexBytes = raw["from"]
+        self._from: HexBytes = raw.get("from","")
+        if self._from == "":
+            self._from: HexBytes = raw.get("_from","")
         self.gasUsed: HexBytes = raw["gasUsed"]
         self.logs: List = [dict(log) for log in raw["logs"]]
         if deep:
@@ -181,10 +185,14 @@ class TransactionReceipt:
                         log["decoded"] = decoded
         self.logsBloom: HexBytes = raw["logsBloom"]
         self.status: int = raw["status"]
-        self._to: HexBytes = raw["to"]
+        self._to: HexBytes = raw.get("to","")
+        if self._to == "":
+            self._to: HexBytes = raw.get("_to","")
         self.transactionHash: HexBytes = raw["transactionHash"]
         self.transactionIndex: int = raw["transactionIndex"]
-        self._type: HexBytes = raw["type"]
+        self._type: HexBytes = raw.get("type","")
+        if self._type == "":
+            self._type: HexBytes = raw.get("_type","")
 
     def __hash__(self) -> int:
         return self.transactionHash
@@ -210,31 +218,56 @@ class TransactionReceipt:
             "_type": self._type
         }
 
+    def decoding(self):
+        if isinstance(self.blockHash,str):
+            self.blockHash = HexBytes(self.blockHash)
+        if isinstance(self.contractAddress,str):
+            self.contractAddress = HexBytes(self.contractAddress)
+        if isinstance(self.gasUsed,str):
+            self.gasUsed = HexBytes(self.gasUsed)
+        if isinstance(self.logsBloom,str):
+            self.logsBloom = HexBytes(self.logsBloom)
+        if isinstance(self.transactionHash,str):
+            self.transactionHash = HexBytes(self.transactionHash)
+
 
 class Transaction:
     """
     A copy class for a transaction, useful for type hinting
 
     """
-    def __init__(self, raw, deep) -> None:
+    def __init__(self, raw, deep, decode=False) -> None:
         raw = dict(raw)
         self.blockHash: HexBytes = raw["blockHash"]
         self.blockNumber: int = raw["blockNumber"]
-        self._from: HexBytes = raw["from"]
+        self._from: HexBytes = raw.get("from","")
+        if self._from == "":
+            self._from: HexBytes = HexBytes(raw.get("_from",""))
         self.gas: int = raw["gas"]  # value in wei
         self.gasPrice: int = raw["gasPrice"]  # value in wei
-        self._hash: HexBytes = raw["hash"]
+        self._hash: HexBytes = raw.get("hash","")
+        if self._hash == "":
+            self._hash: HexBytes = HexBytes(raw.get("_hash",""))
         self.input: HexBytes = raw["input"]
         self.nonce: int = raw["nonce"]
         self.r: HexBytes = raw["r"]
         self.s: HexBytes = raw["s"]
-        self._to: HexBytes = raw["to"]
-        self.index: int = raw["transactionIndex"]
+        self._to: HexBytes = raw.get("to","")
+        if self._to == "":
+            self._to: HexBytes = HexBytes(raw.get("_to",""))
+        self.index: HexBytes = raw.get("transactionIndex",None)
+        if self.index == None:
+            self.index: HexBytes = raw.get("index",0)
         self.type: HexBytes = raw["type"]
         self.v: int = raw["v"]
         self.value: int = raw["value"]  # note: value here is in wei, convert to eth, do eth = value / 10**18
-        self.receipt: TransactionReceipt = Infura.get_transaction_receipt(
-            self._hash.hex(), deep=deep) if deep else ""
+        if deep:
+            self.receipt: TransactionReceipt = Infura.get_transaction_receipt(
+                self._hash.hex(), deep=deep) if deep else raw.get("receipt","")
+        else:
+            self.receipt = TransactionReceipt(raw.get("receipt",""),deep, decode)
+        if decode:
+            self.decoding()
 
     def __hash__(self) -> int:
         return self._hash
@@ -262,6 +295,16 @@ class Transaction:
             "receipt": self.receipt.encode() if self.receipt != "" else ""
         }
 
+    def decoding(self):
+        if isinstance(self.blockHash,str):
+            self.blockHash = HexBytes(self.blockHash)
+        if isinstance(self.r,str):
+            self.r = HexBytes(self.r)
+        if isinstance(self.s,str):
+            self.s = HexBytes(self.s)
+        if isinstance(self.type,str):
+            self.type = HexBytes(self.type)
+
 
 class Block:
     """
@@ -270,14 +313,16 @@ class Block:
     If deep is True, the transactions will be a list of Transaction objects.
 
     """
-    def __init__(self, raw, deep) -> None:
+    def __init__(self, raw, deep,decode=False) -> None:
         raw = dict(raw)
         self.raw = raw
         self.difficulty: int = raw["difficulty"]
         self.extraData: HexBytes = raw["extraData"]
         self.gasLimit: int = raw["gasLimit"]
         self.gasUsed: int = raw["gasUsed"]
-        self._hash: HexBytes = raw["hash"]
+        self._hash: HexBytes = raw.get("hash","")
+        if self._hash == "":
+            self._hash: HexBytes = HexBytes(raw.get("_hash",""))
         self.logsBloom: HexBytes = raw["logsBloom"]
         self.miner: HexBytes = raw["miner"]
         self.mixHash: HexBytes = raw["mixHash"]
@@ -291,10 +336,21 @@ class Block:
         self.timestamp: int = raw["timestamp"]
         self.totalDifficulty: int = raw["totalDifficulty"]
         self.transactionHashes: List[HexBytes] = raw["transactions"]
-        self.transactions: List[Transaction] = [
-            Infura.get_transaction(txn.hex()) for txn in self.transactionHashes] if deep else ""
+        if deep:
+            self.transactions: List[Transaction] = []
+            for index, txn in enumerate(self.transactionHashes):
+                print(f"\x1b[1KBlock[{self.number}] loading transaction "
+                      + f"{index} of {len(self.transactionHashes)} "
+                      + f"({index/len(self.transactionHashes)*100:.2f}%)..."
+                      ,end="\r")
+                self.transactions.append(Infura.get_transaction(txn.hex()))
+            print("\x1b[1K",end="\r")
+        else:
+            self.transactions = [Transaction(t,deep,decode) for t in raw.get("transactions","")]
         self.transactionsRoot: HexBytes = raw["transactionsRoot"]
         self.uncles: List[HexBytes] = raw["uncles"]
+        if decode:
+            self.decoding()
 
     def __hash__(self) -> int:
         return self._hash
@@ -333,6 +389,33 @@ class Block:
             "uncles": self.uncles
         }
 
+    def decoding(self):
+        if isinstance(self.extraData,str):
+            self.extraData = HexBytes(self.extraData)
+        if isinstance(self.logsBloom,str):
+            self.logsBloom = HexBytes(self.logsBloom)
+        if isinstance(self.miner,str):
+            self.miner = HexBytes(self.miner)
+        if isinstance(self.mixHash,str):
+            self.mixHash = HexBytes(self.mixHash)
+        if isinstance(self.nonce,str):
+            self.nonce = HexBytes(self.nonce)
+        if isinstance(self.parentHash,str):
+            self.parentHash = HexBytes(self.parentHash)
+        if isinstance(self.receiptsRoot,str):
+            self.receiptsRoot = HexBytes(self.receiptsRoot)
+        if isinstance(self.sha3Uncles,str):
+            self.sha3Uncles = HexBytes(self.sha3Uncles)
+        if isinstance(self.stateRoot,str):
+            self.stateRoot = HexBytes(self.stateRoot)
+        if isinstance(self.transactionsRoot,str):
+            self.transactionsRoot = HexBytes(self.transactionsRoot)
+        for index, item in enumerate(self.transactionHashes):
+            if isinstance(item,str):
+                self.transactionHashes[index] = HexBytes(item)
+        for index, item in enumerate(self.uncles):
+            if isinstance(item,str):
+                self.uncles[index] = HexBytes(item)
 
 if __name__ == "__main__":
     # logging.basicConfig(filename="process.log",level=logging.INFO)

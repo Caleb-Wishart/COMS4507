@@ -69,6 +69,55 @@ class InsertionPair:
         with open(file_name, "w") as fp:
             fp.write(Infura.jsonify(out))
 
+class SupressionList:
+    """
+    The class the represents identified supression attack transactions
+    """
+
+    def __init__(self, transactions: List[dict], token: set, total_in: int):
+        """
+            :param transactions: The supression transactions
+            :param victim: The victim transaction (if there exists one)
+        """
+
+        assert len(transactions) != 0, \
+            "Must be at least one transaction to be considered supression"
+
+        for transaction in transactions:
+            for other in transactions:
+                assert transaction["blockHash"] == other["blockHash"], \
+                    "Two transactions not belong to same block"
+
+        assert len(token) != 0, \
+            "Must be at least one token to be considered supression"
+        self.transactions = transactions
+        self.token = token
+        self.total_in = total_in
+        self.hashes = [t["_hash"].hex() for t in self.transactions]
+        self.participants = set([t["_from"].hex() for t in self.transactions])
+
+    def __repr__(self):
+        hashes = ",\n\t\t".join(self.hashes)
+        participants = ",\n\t\t".join(self.participants)
+        text = f'In block: {((self.transactions[0])["blockHash"]).hex()}\n' \
+               f'Supression Transactions\n' \
+               f'\tTxn hashes:\n\t\t{hashes}\n' \
+               f'\tAttack Participants:\n\t\t{participants}\n' \
+               f"\nTokens transfered: {self.token}\n" \
+               f"Ethereum Input (Eth): {self.total_in / 10**18:.4f}"
+        return text
+
+    def save(self, file_name):
+        """
+        Save the objects into 1 json file
+        """
+        if not file_name.endswith("json"):
+            file_name = os.path.join(file_name, ".json")
+
+        out = {"txns": self.transactions, "token": self.token}
+        with open(file_name, "w") as fp:
+            fp.write(Infura.jsonify(out))
+
 
 def get_swap_gains(t1: Union[Transaction, dict], t2: Union[Transaction, dict]):
     """
@@ -150,6 +199,50 @@ def get_swap_gains(t1: Union[Transaction, dict], t2: Union[Transaction, dict]):
         net_gain = gross_gain - t1_gas_cost - t2_gas_cost
     return net_gain, t1_gas_cost, t2_gas_cost
 
+
+def get_input_amount(txn: Union[Transaction, dict]):
+    """
+    This function returns the amount gained from the swap action (in wei),
+    the transaction costs of the 2 transactions have been taken away and will
+    be added to the transaction dict, if t1, t2 are dict objects.
+
+    Assumptions:
+        1. txn is a transaction that swaps ETH with other tokens (i.e. txn is a buy action)
+        2. consider transaction that includes only ONE swap event in the
+            transaction event
+        3. all transactions passed to this function has and only has
+            1 swap event in the transaction_receipt log
+
+        :param txn: the transaction in question
+        :return
+             (
+                txn input,
+                txn output,
+                txn gas cost
+               ) (in wei)
+    """
+    if isinstance(txn, Transaction):
+        txn = txn.encode()
+
+    # find Swap transaction of txn
+    txn_swap_info = txn.get("swap_event")
+    assert txn_swap_info
+    txn_decoded_amounts = txn_swap_info["args"]
+    # buy action in t1:
+    # amount1In = amount sent for swap (ETH); amount0Out = amount received from swap
+    txn_input, txn_output = \
+        txn_decoded_amounts["amount1In"], txn_decoded_amounts["amount0Out"]
+
+    if txn_input == 0:
+        # first transaction not buy action
+        # print("t1 is a sell action", file=stderr)
+        return -float("inf")
+    else:
+        # calculate the gains (in wei)
+        # gas cost in wei = gas price * actual gas used
+        txn_gas_cost = txn["receipt"]["effectiveGasPrice"] * txn["receipt"]["gasUsed"]
+        txn["actual_transaction_cost"] = txn_gas_cost
+    return txn_input, txn_output, txn_gas_cost
 
 def get_token_transferred_or_deposited(transaction: dict) -> set:
     """
@@ -288,14 +381,32 @@ def print_and_write_stat(text: Union[str, InsertionPair], end="\n", fp=None):
         print(text, end=end, file=fp)
 
 
-def check_block_transactions(current_block: Union[Block, dict], save: bool = False, data_frame=None,
+def insertion_check_block_transactions(current_block: Union[Block, dict], save: bool = False, data_frame=None,
                              save_dir: str = "./temp/insertion_attack/"):
     """
-    Check all transactions in a block to find out suspected fronrunning
-    attack pairs.
+    Check all transactions in a block to find out suspected insertion
+    fronrunning attack pairs.
 
     Assumptions: we only check the transaction that has and only has ONE
     swap event
+
+    Huertistics:
+        Terms:
+            t1: frontrunning transaction
+            t2: backrunning transaction
+            tv: victim transaction
+
+        - t1 is a transaction that swaps ETH with other tokens
+            (i.e. t1 is a buy action)
+        - consider transaction that includes only ONE swap event in the
+            transaction event
+        - each t2 is mapped to exactly ONE t1
+        - victim transaction not required
+        - swap event in the transaction log is formulated in standard form
+            `Swap(index_topic_1 address sender, uint256 amount0In,
+                uint256 amount1In, uint256 amount0Out, uint256 amount1Out,
+                index_topic_2 address to)`.
+
 
     :param current_block: The block to be checked
     :param save: whether the found insertion attack pairs are saved
@@ -306,7 +417,11 @@ def check_block_transactions(current_block: Union[Block, dict], save: bool = Fal
     start_time = time()
 
     if isinstance(current_block, Block):
-        current_block = current_block.encode()
+        current_block : dict = current_block.encode()
+
+    # ensure we are working on a copy and not affecting the original
+    current_block = dict(current_block)
+
     transactions = current_block["transactions"]
     # keep track of original transaction numbers in the block
     current_block["origin_transaction_number"] = original_number = len(transactions)
@@ -348,7 +463,7 @@ def check_block_transactions(current_block: Union[Block, dict], save: bool = Fal
             transaction_receipt['event_counts'] = event_counts
 
     # the list that records the set of identified (t1, t2)
-    insertion_pairs: [InsertionPair] = []
+    insertion_pairs: List[InsertionPair] = []
     # lists that record hashes of t1, t2, victim transaction as well as transaction gains of each attack
     t1_hashes, t2_hashes, transaction_gains = [], [], []
     victim_hashes, victim_input_amounts = [], []
@@ -425,7 +540,7 @@ def check_block_transactions(current_block: Union[Block, dict], save: bool = Fal
     if attack_count == 0:
         # no insertion attack found, return early in case encounter error when
         # doing min(), max() call on empty arrays
-        text = f'Block {current_block["number"]} analyzed, \n' \
+        text = f'Block {current_block["number"]} analyzed for insertion, \n' \
                f'total number of transactions in the block = {original_number},' \
                f' attacks found = {attack_count}.\n' \
                f'Time elapsed = {timedelta(seconds=(end_time - start_time))}\n\n'
@@ -468,6 +583,174 @@ def check_block_transactions(current_block: Union[Block, dict], save: bool = Fal
     text += f"Number of victim transactions = {tv_count}, max victim transaction input = {max_tv_input}.\n"
     text += f'Time elapsed = {timedelta(seconds=(end_time - start_time))}.\n\n'
     text += f"t1's: {t1_hashes}\nt2's: {t2_hashes}\ngains: {transaction_gains}"
+    print_and_write_stat(text, fp=out_log)
+    if out_log:
+        out_log.close()
+    return data_frame, original_number
+
+def supression_check_block_transactions(current_block: Union[Block, dict], save: bool = False, data_frame=None,
+                             save_dir: str = "./temp/supression_attack/", num_tran: int = 5, min_eth: int = 1):
+    """
+    Check all transactions in a block to find out suspected supression
+    frontrunning attack pairs.
+
+    Assumptions: we do no require the presence of a victim transaction
+
+    Hueristics:
+        Terms:
+            tI_{num}: insertion transaction where {num} is the
+                position in similar transactions
+            tv: victim transaction
+
+        - there are at least num_tran (default 5) transactions that swap
+            ETH with other tokens (i.e. tI_1 is a buy action)
+        - each insertion transactions swaps to the same other tokens
+            (i.e. tI_1 is to DOGE then tI_2 must also be DOGE)
+        - consider transaction that includes only ONE swap event in the
+            transaction event
+        - all insertion transactions swap >= min_eth ETH (default 1)
+        - swap event in the transaction log is formulated in standard form
+            `Swap(index_topic_1 address sender, uint256 amount0In,
+                uint256 amount1In, uint256 amount0Out, uint256 amount1Out,
+                index_topic_2 address to)`.
+
+    :param current_block: The block to be checked
+    :param save: whether the found supression attack blocks are saved
+    :param save_dir: the directory to be saved
+    :param data_frame: the dataframe the records all detection info
+    :return (data_frame, number of transactions scanned)
+    """
+    start_time = time()
+
+    if isinstance(current_block, Block):
+        current_block : dict = current_block.encode()
+
+    # ensure we are working on a copy and not affecting the original
+    current_block = dict(current_block)
+
+    transactions = current_block["transactions"]
+    # keep track of original transaction numbers in the block
+    current_block["origin_transaction_number"] = original_number = len(transactions)
+
+    out_log = None
+    name = None
+    if save:
+        # save dir named after current block number
+        name = f'block_{current_block["number"]}'
+        save_dir = os.path.join(save_dir, name)
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        out_log = open(os.path.join(save_dir, name + "_" + "stats.log"), "w")
+
+    # supression attack heuristics:
+    # each transaction has and only has one swap event, eliminate those
+    # with number of swap event != 1
+    transaction_idx = 0
+    while transaction_idx < len(transactions):
+        transaction = transactions[transaction_idx]
+        transaction_hash = transaction["_hash"].hex()
+        transaction_receipt = transaction["receipt"]
+        # if swap event available, transaction["swap_event"] shortcut added here
+        event_counts, weth_in_swap, swap_format_correct = legit_check(transaction=transaction)
+        swap_count = event_counts.get("Swap")
+
+        if not weth_in_swap:
+            # transaction not involving WETH as one of the swap tokens
+            del transactions[transaction_idx]
+        elif not swap_count or swap_count != 1:
+            # number of swap event != 1
+            del transactions[transaction_idx]
+        elif not swap_format_correct:
+            # swap function not standardized
+            del transactions[transaction_idx]
+        else:
+            transaction_idx += 1
+            # add event counts to each transaction receipt in case it is useful later
+            transaction_receipt['event_counts'] = event_counts
+
+    counts = {}
+    attacks = {}
+    for t in transactions:
+        token = get_token_transferred_or_deposited(t)
+        if len(token) != 1:
+            # more than 1 token swapped
+            continue
+        token, *_ = token
+        l, val, t_input = counts.get(token, ([],0, 0))
+        res = get_input_amount(t)
+        if res == -float("inf"):
+            # one transaction not a swap input
+            continue
+        txn_input, txn_output, txn_gas_cost = res
+        if txn_input / 10**18 < min_eth:
+            continue
+        val += 1
+        l += [t]
+        t_input += txn_input
+        counts[token] = (l, val, t_input)
+        if val >= num_tran:
+            attacks[token] = (l, t_input)
+    sups: List[SupressionList] = []
+    attack_count = len(attacks)
+    for token, attack in attacks.items():
+        txns, value = attack
+        supression = SupressionList(txns, token, value)
+        sups.append(supression)
+        print_and_write_stat("*" * 80, fp=out_log)
+        print_and_write_stat(f"Found supression attack", fp=out_log)
+        print_and_write_stat(supression, fp=out_log)
+        print_and_write_stat("*" * 80, fp=out_log, end="\n\n")
+        # save the pair to folder, named with attack_count
+        if save:
+            supression.save(file_name=os.path.join(save_dir, f"{attack_count}.json"))
+    end_time = time()
+
+    if attack_count == 0:
+        # no insertion attack found, return early in case encounter error when
+        # doing min(), max() call on empty arrays
+        text = f'Block {current_block["number"]} analyzed for suppression, \n' \
+               f'total number of transactions in the block = {original_number},' \
+               f' attacks found = {attack_count}.\n' \
+               f'Time elapsed = {timedelta(seconds=(end_time - start_time))}\n\n'
+        print_and_write_stat(text, fp=out_log)
+        if out_log:
+            out_log.close()
+        return data_frame, original_number
+
+    if save:
+        for attack_no, attack in enumerate(sups):
+
+            hashes = [t["_hash"].hex() for t in attack.transactions]
+            participants = [t["_from"].hex() for t in attack.transactions]
+            # save csv file
+            df = pd.DataFrame(data={"block_num": [current_block["number"]] * len(hashes),
+                                    "attack number" : [attack_no] * len(hashes),
+                                    "attack_txn": hashes, "t1_from": participants,
+                                    "token_attacked": [attack.token] * len(hashes),
+                                    "total_input_wei": [attack.total_in] * len(hashes)})
+            df.to_csv(os.path.join(save_dir, name + "_" + "stats.csv"), index=False)
+
+            if data_frame is not None:
+                # if dataframe exists, then concat it
+                assert list(data_frame.columns) == list(df.columns), \
+                    f"DataFrame's columns: {data_frame.columns}\n" \
+                    f"df's columns: {df.columns}"
+                data_frame = pd.concat([data_frame, df])
+            else:
+                data_frame = df
+
+    text = f'Block {current_block["number"]} analyzed, \n' \
+           f'total number of transactions in the block = {original_number},' \
+           f' attacks found = {attack_count}, percentage = {(attack_count / original_number) * 100 :4f}%.\n'
+    text += f"max number of attack txns: {max([len(s.transactions) for s in sups])};\n"
+    text += f"min number of attack txns: {min([len(s.transactions) for s in sups])}.\n"
+    text += f"max number of attack participants: {max([len(s.participants) for s in sups])};\n"
+    text += f"min number of attack participants: {min([len(s.participants) for s in sups])}.\n"
+    text += f"max wei used: {max([s.total_in for s in sups])};\n"
+    text += f"min wei used: {min([s.total_in for s in sups])}.\n"
+    attacked_tokens = [s.token for s in sups]
+    text += f"Most common attacked token = {max(attacked_tokens, key=attacked_tokens.count)}.\n"
+    text += f'Time elapsed = {timedelta(seconds=(end_time - start_time))}.'
     print_and_write_stat(text, fp=out_log)
     if out_log:
         out_log.close()

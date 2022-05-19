@@ -43,6 +43,8 @@ if __name__ == "__main__":
                              "insertion attack detection")
     parser.add_argument("-output_dir", type=str, default="./temp/insertion_attack/",
                         help="The directory where the output files will be stored")
+    parser.add_argument("-supp_output_dir", type=str, default="./temp/supression_attack/",
+                        help="The directory where the supression attack output files will be stored")
     parser.add_argument("-start_from", type=int, default=-1,
                         help="The block number to start from")
 
@@ -67,6 +69,16 @@ if __name__ == "__main__":
     else:
         # start up new df
         df = None
+    sup_out_path = os.path.join(args.supp_output_dir, "supression_attack_records.csv")
+    if os.path.exists(sup_out_path) and args.start_from != -1:
+        # resume previous work
+        print("Found previous dataset, now try to load and resume.")
+        df_sup = pd.read_csv(sup_out_path)
+        assert max(df_sup["block_num"]) < args.start_from, \
+            f"latest record in {sup_out_path} is block later than current starting block {args.start_from}."
+    else:
+        # start up new df
+        df_sup = None
 
     block_count = 0
     transaction_count = 0
@@ -77,6 +89,8 @@ if __name__ == "__main__":
             continue
         print(f"Now starting to analyze block {block_number}")
         print(f"Pulling block {block_number}...")
+        retrieve_time = time()
+
         current_block = None
         try:
             current_block = Infura.get_block(blockNum=block_number, deep=True)
@@ -99,17 +113,27 @@ if __name__ == "__main__":
                 # error twice with interval less than one day
                 print("error occurred more than once", file=sys.stderr)
                 exit(1)
-
-        print(f"Pulling finished, now starting to analyze block {block_number}...")
-        df, t_count = check_block_transactions(current_block=current_block, save=True,
+        print(f"Pulling finished in {timedelta(seconds=time() - start_time)}, now starting to analyze block {block_number} for insertion attacks...")
+        df, t_count1 = insertion_check_block_transactions(current_block=current_block, save=True,
                                                data_frame=df, save_dir=args.output_dir)
+        print(f"Insertion analysis finished, now starting to analyze block {block_number} for supression attacks...")
+        df_sup, t_count2 = supression_check_block_transactions(current_block=current_block, save=True,
+                                               data_frame=df_sup, save_dir=args.supp_output_dir, num_tran=3,min_eth=0.25)
+        if t_count1 != t_count2:
+            print(f"Unexpected error: Transaction counts are not the same -> insertion({t_count1}), supression({t_count2})")
+        t_count =  t_count1
         block_count += 1
         transaction_count += t_count
         if df is not None:
             df.to_csv(out_path, index=False)
-            print(f"Checkpoint to block {block_number} saved.\n")
+            print(f"Checkpoint to block {block_number} saved for insertion attack.\n")
         else:
-            print(f"No detected transactions after analyzed {block_number}")
+            print(f"No detected insertion transactions after analyzed {block_number}")
+        if df_sup is not None:
+            df_sup.to_csv(sup_out_path, index=False)
+            print(f"Checkpoint to block {block_number} saved for supression attack.\n")
+        else:
+            print(f"No detected supression transactions after analyzed {block_number}")
     end_time = time()
     print(f'Number of blocks analyzed = {block_count}, number of transactions scanned = {transaction_count}.\n'
           f'Insertion attack analysis finished, now exit.\nProgram elapsed time ='

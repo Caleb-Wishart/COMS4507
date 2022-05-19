@@ -2,7 +2,7 @@
 
 # COMS4507-Project: Insertion and Suppression Attacks Detection Tool
  This repo contains the code segment for COMS4507 Project *Frontrunning and Sandwich attacks in Ethereum*.
- 
+
 The implemented component can be split into 3 parts:
 1. random block sampling tool [sample_blocks](./sample_blocks.py).
 2. insertion attack detection tool [insertion_attack_runner](./insertion_attack_runner.py)
@@ -11,7 +11,7 @@ The implemented component can be split into 3 parts:
 
 
 # Block sampling
-This [script](./sample_blocks.py) provides functionality to sample blocks from a full block info dataset.
+[sample_blocks](./sample_blocks.py) provides functionality to sample blocks from a full block info dataset.
 Usage:
 
 ```shell
@@ -24,9 +24,8 @@ python3 sample_blocks.py -seed 1 -days_tp_monitor 7 -sample_size 10 \
 Example full blocks info for 1-week time frame between Apr 29, 2022 and May 5, 2022 is available in [blocks_0429_0505.csv](./data/blocks_0429_0505.csv).
 
 
-
 # Insertion Attack Detection
-This [script](./insertion_attack_runner.py) is the runner of the sandwich attack detection tool.
+[frontrun_runner](./frontrun_runner.py) is the runner of the sandwich attack detection tool.
 Algorithm can be found in [here](./utils/frontrun_algorithm.py).
 
 
@@ -52,9 +51,21 @@ python3 insertion_attack_runner.py \
 -output_dir ./temp/insertion_attack/
 ```
 
+Heuristics for an Supression attack detection.
+```
+tI_{num}: insertion transaction where {num} is the position in similar transactions
+tv: victim transaction
+```
+- there are at least 5 (configurable) transactions that swap ETH with other tokens (i.e. tI_1 is a buy action)
+- each insertion transactions swaps to the same other tokens (i.e. tI_1 is to DOGE then tI_2 must also be DOGE)
+- consider transaction that includes only ONE swap event in the transaction event
+- all insertion transactions swap >= 1 ETH (configurable)
+- swap event in the transaction log is formulated in standard form `Swap(index_topic_1 address sender, uint256 amount0In, uint256 amount1In,
+         uint256 amount0Out, uint256 amount1Out, index_topic_2 address to)`.
+
+
 ### Backtesting
 - Insertion attack detection log of example can be found in [insertion_attack_records.csv](temp/insertion_attack/insertion_attack_records.csv).
 Full transaction object of detected insertion attack instances are named as *block_blocknum* and can be found in [here](temp/insertion_attack/).
 
-- Some stats and result visualization are prepared in [insertion_attack_record_analysis.ipynb](./insertion_attack_record_analysis.ipynb).
-
+- Some stats and result visualization are prepared in [frontrun_record_analysis.ipynb](./frontrun_record_analysis.ipynb).
