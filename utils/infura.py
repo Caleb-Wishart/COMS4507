@@ -6,6 +6,7 @@ from requests import JSONDecodeError, get
 from time import sleep, time
 from web3 import Web3
 import json
+
 # import logging
 from hexbytes import HexBytes
 from web3.datastructures import AttributeDict
@@ -14,19 +15,18 @@ from web3.logs import DISCARD
 
 class Infura:
     # infrua API key
-    # jason's Infura key: "ee4c35b8c3114586a74eda3b8b634228"
-    # jason's etherscan key: "2JPX8EJNBE2USI1VDBHJPTCGG994ERQ6QZ"
-    INFURA_API_KEY = 'b07f1f09ee5443c6b89fcfd1a4300fbc'
-    w3: Web3 = Web3(Web3.HTTPProvider(
-        f'https://mainnet.infura.io/v3/{INFURA_API_KEY}'))
+    INFURA_API_KEY = "API_KEY"
+    w3: Web3 = Web3(Web3.HTTPProvider(f"https://mainnet.infura.io/v3/{INFURA_API_KEY}"))
     # Etherscan API key
-    ETHERSCAN_API_KEY = 'AMD3PDCXAPI6WKK8VJ6VGAZB5XJB2UHV1U'
+    ETHERSCAN_API_KEY = "AMD3PDCXAPI6WKK8VJ6VGAZB5XJB2UHV1U"
     abi_endpoint = "https://api.etherscan.io/api?module=contract&action=getabi"
     ABI = {}
     _contract_times = [0] * 5
 
     @staticmethod
-    def get_block(blockNum: Union[str, int] = 'latest', n: int = 1, deep=True) -> Union[Block, List[Block]]:
+    def get_block(
+        blockNum: Union[str, int] = "latest", n: int = 1, deep=True
+    ) -> Union[Block, List[Block]]:
         """
         Get a block from the block chain
 
@@ -37,11 +37,11 @@ class Infura:
         """
         res = []
         # init
-        block: Dict = {'parentHash': blockNum}
+        block: Dict = {"parentHash": blockNum}
         # get n blocks and append
         for _ in range(n):
             # logging.info(f"Requesting Block '{block['parentHash']}' from Infura API")
-            block: AttributeDict = Infura.w3.eth.get_block(block['parentHash'])
+            block: AttributeDict = Infura.w3.eth.get_block(block["parentHash"])
             res.append(Block(block, deep))
         return res if len(res) != 1 else res[0]
 
@@ -54,7 +54,7 @@ class Infura:
         :return: a transaction object
         """
         # logging.info(f"Requesting Transaction '{txnHash}' from Infura API")
-        return Transaction(Infura.w3.eth.get_transaction(txnHash),deep)
+        return Transaction(Infura.w3.eth.get_transaction(txnHash), deep)
 
     @staticmethod
     def get_transaction_receipt(txnHash: str, deep=True) -> Transaction:
@@ -65,7 +65,7 @@ class Infura:
         :return: a transaction receipt object
         """
         # logging.info(f"Requesting Transaction Receipt '{txnHash}' from Infura API")
-        return TransactionReceipt(Infura.w3.eth.get_transaction_receipt(txnHash),deep)
+        return TransactionReceipt(Infura.w3.eth.get_transaction_receipt(txnHash), deep)
 
     @staticmethod
     def save_data(f: TextIOWrapper, data) -> None:
@@ -100,9 +100,11 @@ class Infura:
                 # SAFE MODE
                 sleep(0.1)
             # logging.info(f"Requesting abi info from contract '{contractAddr}' from Etherscan API")
-            abi = get(f"{Infura.abi_endpoint}&address={contractAddr}&apikey={Infura.ETHERSCAN_API_KEY}").text
+            abi = get(
+                f"{Infura.abi_endpoint}&address={contractAddr}&apikey={Infura.ETHERSCAN_API_KEY}"
+            ).text
             if "Max rate limit reached" in abi:
-                print("Etherscan API Limit reached",file=stderr)
+                print("Etherscan API Limit reached", file=stderr)
                 sleep(2)
             if "Contract source code not verified" in abi:
                 return None
@@ -112,7 +114,9 @@ class Infura:
                 # problem decoding
                 return None
         # logging.info(f"Requesting Contract '{contractAddr}' from Infura API")
-        return Infura.w3.eth.contract(address=contractAddr, abi=Infura.ABI[contractAddr]["result"])
+        return Infura.w3.eth.contract(
+            address=contractAddr, abi=Infura.ABI[contractAddr]["result"]
+        )
 
     @staticmethod
     def jsonify(data) -> str:
@@ -127,11 +131,12 @@ class Infura:
                 if isinstance(obj, bytes):
                     return HexBytes(obj).hex()
                 return super().default(obj)
+
         return json.dumps(data, cls=HexJsonEncoder, indent=4, sort_keys=True)
 
     @staticmethod
     def load_data(name: str = "temp.json") -> List[Block]:
-        with open(name, 'r') as f:
+        with open(name, "r") as f:
             try:
                 return json.loads(f.read())
             except JSONDecodeError:
@@ -143,6 +148,7 @@ class TransactionReceipt:
     A copy class for a transaction receipt, useful for type hinting
 
     """
+
     def __init__(self, raw, deep, decode=False) -> None:
         raw = dict(raw)
         self.raw = raw
@@ -151,9 +157,9 @@ class TransactionReceipt:
         self.contractAddress: HexBytes = raw["contractAddress"]
         self.cumulativeGasUsed: int = raw["cumulativeGasUsed"]
         self.effectiveGasPrice: int = raw["effectiveGasPrice"]
-        self._from: str = raw.get("from","")
+        self._from: str = raw.get("from", "")
         if self._from == "":
-            self._from: str = raw.get("_from","")
+            self._from: str = raw.get("_from", "")
         self.gasUsed: int = raw["gasUsed"]
         self.logs: List = [dict(log) for log in raw["logs"]]
         if deep:
@@ -178,21 +184,23 @@ class TransactionReceipt:
                     if event_signature_hex == receipt_event_signature_hex:
                         # Decode matching log
                         try:
-                            decoded = contract.events[event["name"]]().processReceipt(self.raw, errors=DISCARD)
+                            decoded = contract.events[event["name"]]().processReceipt(
+                                self.raw, errors=DISCARD
+                            )
                         except ValueError:
                             # No matching events found or Multiple events found
                             continue
                         log["decoded"] = decoded
         self.logsBloom: HexBytes = raw["logsBloom"]
         self.status: int = raw["status"]
-        self._to: str = raw.get("to","")
+        self._to: str = raw.get("to", "")
         if self._to == "":
-            self._to: str = raw.get("_to","")
+            self._to: str = raw.get("_to", "")
         self.transactionHash: HexBytes = raw["transactionHash"]
         self.transactionIndex: int = raw["transactionIndex"]
-        self._type: str = raw.get("type","")
+        self._type: str = raw.get("type", "")
         if self._type == "":
-            self._type: str = raw.get("_type","")
+            self._type: str = raw.get("_type", "")
 
     def __hash__(self) -> int:
         return self.transactionHash
@@ -215,19 +223,19 @@ class TransactionReceipt:
             "_to": self._to,
             "transactionHash": self.transactionHash,
             "transactionIndex": self.transactionIndex,
-            "_type": self._type
+            "_type": self._type,
         }
 
     def decoding(self):
-        if isinstance(self.blockHash,str):
+        if isinstance(self.blockHash, str):
             self.blockHash = HexBytes(self.blockHash)
-        if isinstance(self.contractAddress,str):
+        if isinstance(self.contractAddress, str):
             self.contractAddress = HexBytes(self.contractAddress)
-        if isinstance(self.gasUsed,str):
+        if isinstance(self.gasUsed, str):
             self.gasUsed = HexBytes(self.gasUsed)
-        if isinstance(self.logsBloom,str):
+        if isinstance(self.logsBloom, str):
             self.logsBloom = HexBytes(self.logsBloom)
-        if isinstance(self.transactionHash,str):
+        if isinstance(self.transactionHash, str):
             self.transactionHash = HexBytes(self.transactionHash)
 
 
@@ -236,36 +244,42 @@ class Transaction:
     A copy class for a transaction, useful for type hinting
 
     """
+
     def __init__(self, raw, deep, decode=False) -> None:
         raw = dict(raw)
         self.blockHash: HexBytes = raw["blockHash"]
         self.blockNumber: int = raw["blockNumber"]
-        self._from: str = raw.get("from","")
+        self._from: str = raw.get("from", "")
         if self._from == "":
-            self._from: str = raw.get("_from","")
+            self._from: str = raw.get("_from", "")
         self.gas: int = raw["gas"]  # value in wei
         self.gasPrice: int = raw["gasPrice"]  # value in wei
-        self._hash: HexBytes = raw.get("hash","")
+        self._hash: HexBytes = raw.get("hash", "")
         if self._hash == "":
-            self._hash: HexBytes = HexBytes(raw.get("_hash",""))
+            self._hash: HexBytes = HexBytes(raw.get("_hash", ""))
         self.input: str = raw["input"]
         self.nonce: int = raw["nonce"]
         self.r: HexBytes = raw["r"]
         self.s: HexBytes = raw["s"]
-        self._to: str = raw.get("to","")
+        self._to: str = raw.get("to", "")
         if self._to == "":
-            self._to: str = raw.get("_to","")
-        self.index: int = raw.get("transactionIndex",None)
+            self._to: str = raw.get("_to", "")
+        self.index: int = raw.get("transactionIndex", None)
         if self.index == None:
-            self.index: int = raw.get("index",0)
+            self.index: int = raw.get("index", 0)
         self.type: str = raw["type"]
         self.v: int = raw["v"]
-        self.value: int = raw["value"]  # note: value here is in wei, convert to eth, do eth = value / 10**18
+        self.value: int = raw[
+            "value"
+        ]  # note: value here is in wei, convert to eth, do eth = value / 10**18
         if deep:
-            self.receipt: TransactionReceipt = Infura.get_transaction_receipt(
-                self._hash.hex(), deep=deep) if deep else raw.get("receipt","")
+            self.receipt: TransactionReceipt = (
+                Infura.get_transaction_receipt(self._hash.hex(), deep=deep)
+                if deep
+                else raw.get("receipt", "")
+            )
         else:
-            self.receipt = TransactionReceipt(raw.get("receipt",""),deep, decode)
+            self.receipt = TransactionReceipt(raw.get("receipt", ""), deep, decode)
         if decode:
             self.decoding()
 
@@ -292,17 +306,17 @@ class Transaction:
             "type": self.type,
             "v": self.v,
             "value": self.value,
-            "receipt": self.receipt.encode() if self.receipt != "" else ""
+            "receipt": self.receipt.encode() if self.receipt != "" else "",
         }
 
     def decoding(self):
-        if isinstance(self.blockHash,str):
+        if isinstance(self.blockHash, str):
             self.blockHash = HexBytes(self.blockHash)
-        if isinstance(self.r,str):
+        if isinstance(self.r, str):
             self.r = HexBytes(self.r)
-        if isinstance(self.s,str):
+        if isinstance(self.s, str):
             self.s = HexBytes(self.s)
-        if isinstance(self.type,str):
+        if isinstance(self.type, str):
             self.type = HexBytes(self.type)
 
 
@@ -313,16 +327,17 @@ class Block:
     If deep is True, the transactions will be a list of Transaction objects.
 
     """
-    def __init__(self, raw, deep,decode=False) -> None:
+
+    def __init__(self, raw, deep, decode=False) -> None:
         raw = dict(raw)
         self.raw = raw
         self.difficulty: int = raw["difficulty"]
         self.extraData: HexBytes = raw["extraData"]
         self.gasLimit: int = raw["gasLimit"]
         self.gasUsed: int = raw["gasUsed"]
-        self._hash: HexBytes = raw.get("hash","")
+        self._hash: HexBytes = raw.get("hash", "")
         if self._hash == "":
-            self._hash: HexBytes = HexBytes(raw.get("_hash",""))
+            self._hash: HexBytes = HexBytes(raw.get("_hash", ""))
         self.logsBloom: HexBytes = raw["logsBloom"]
         self.miner: HexBytes = raw["miner"]
         self.mixHash: HexBytes = raw["mixHash"]
@@ -339,16 +354,20 @@ class Block:
         if deep and not decode:
             self.transactions: List[Transaction] = []
             for index, txn in enumerate(self.transactionHashes):
-                print(f"\x1b[1KBlock[{self.number}] loading transaction "
-                      + f"{index} of {len(self.transactionHashes)} "
-                      + f"({index/len(self.transactionHashes)*100:.2f}%)..."
-                      ,end="\r")
+                print(
+                    f"\x1b[1KBlock[{self.number}] loading transaction "
+                    + f"{index} of {len(self.transactionHashes)} "
+                    + f"({index/len(self.transactionHashes)*100:.2f}%)...",
+                    end="\r",
+                )
                 self.transactions.append(Infura.get_transaction(txn.hex()))
-            print("\x1b[1K",end="\r")
+            print("\x1b[1K", end="\r")
         self.transactionsRoot: HexBytes = raw["transactionsRoot"]
         self.uncles: List[HexBytes] = raw["uncles"]
         if decode:
-            self.transactions = [Transaction(t,deep,decode) for t in raw.get("transactions","")]
+            self.transactions = [
+                Transaction(t, deep, decode) for t in raw.get("transactions", "")
+            ]
             self.decoding()
 
     def __hash__(self) -> int:
@@ -383,41 +402,48 @@ class Block:
             "timestamp": self.timestamp,
             "totalDifficulty": self.totalDifficulty,
             "transactionHashes": self.transactionHashes,
-            "transactions": [transaction.encode() for transaction in self.transactions if transaction != ""],
+            "transactions": [
+                transaction.encode()
+                for transaction in self.transactions
+                if transaction != ""
+            ],
             "transactionsRoot": self.transactionsRoot,
-            "uncles": self.uncles
+            "uncles": self.uncles,
         }
 
     def decoding(self):
-        if isinstance(self.extraData,str):
+        if isinstance(self.extraData, str):
             self.extraData = HexBytes(self.extraData)
-        if isinstance(self.logsBloom,str):
+        if isinstance(self.logsBloom, str):
             self.logsBloom = HexBytes(self.logsBloom)
-        if isinstance(self.miner,str):
+        if isinstance(self.miner, str):
             self.miner = HexBytes(self.miner)
-        if isinstance(self.mixHash,str):
+        if isinstance(self.mixHash, str):
             self.mixHash = HexBytes(self.mixHash)
-        if isinstance(self.nonce,str):
+        if isinstance(self.nonce, str):
             self.nonce = HexBytes(self.nonce)
-        if isinstance(self.parentHash,str):
+        if isinstance(self.parentHash, str):
             self.parentHash = HexBytes(self.parentHash)
-        if isinstance(self.receiptsRoot,str):
+        if isinstance(self.receiptsRoot, str):
             self.receiptsRoot = HexBytes(self.receiptsRoot)
-        if isinstance(self.sha3Uncles,str):
+        if isinstance(self.sha3Uncles, str):
             self.sha3Uncles = HexBytes(self.sha3Uncles)
-        if isinstance(self.stateRoot,str):
+        if isinstance(self.stateRoot, str):
             self.stateRoot = HexBytes(self.stateRoot)
-        if isinstance(self.transactionsRoot,str):
+        if isinstance(self.transactionsRoot, str):
             self.transactionsRoot = HexBytes(self.transactionsRoot)
         for index, item in enumerate(self.transactionHashes):
-            if isinstance(item,str):
+            if isinstance(item, str):
                 self.transactionHashes[index] = HexBytes(item)
         for index, item in enumerate(self.uncles):
-            if isinstance(item,str):
+            if isinstance(item, str):
                 self.uncles[index] = HexBytes(item)
+
 
 if __name__ == "__main__":
     # logging.basicConfig(filename="process.log",level=logging.INFO)
-    block = Infura.get_block('0x4cb6e139755c24f5c295be2d1010aaeccab8f3003cf0d1944dd8642116e97a24',deep=False)
-    with open('results/example_block.json', 'w') as f:
+    block = Infura.get_block(
+        "0x4cb6e139755c24f5c295be2d1010aaeccab8f3003cf0d1944dd8642116e97a24", deep=False
+    )
+    with open("results/example_block.json", "w") as f:
         Infura.save_data(f, [block])
